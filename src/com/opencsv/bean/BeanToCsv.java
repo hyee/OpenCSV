@@ -20,6 +20,7 @@ import com.opencsv.CSVWriter;
 
 import java.beans.IntrospectionException;
 import java.beans.PropertyDescriptor;
+import java.io.IOException;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -84,7 +85,7 @@ public class BeanToCsv<T> {
      * @throws IllegalAccessException -  thrown if there is an failure in Introspection.
      * @throws InvocationTargetException -  thrown if there is an failure in Introspection.
      */
-    private void processAndWriteObjects(CSVWriter csv, List<?> objects, List<Method> getters) throws IntrospectionException, IllegalAccessException, InvocationTargetException {
+    private void processAndWriteObjects(CSVWriter csv, List<?> objects, List<Method> getters) throws IntrospectionException, IllegalAccessException, InvocationTargetException, IOException {
         for (Object obj : objects) {
             String[] line = processObject(getters, obj);
             csv.writeNext(line);

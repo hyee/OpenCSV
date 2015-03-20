@@ -86,7 +86,7 @@ public class CsvToBean<T> {
       try {
          mapper.captureHeader(csv);
          String[] line;
-         List<T> list = new ArrayList<>();
+         List<T> list = new ArrayList<T>();
          while (null != (line = csv.readNext())) {
             processLine(mapper, filter, line, list);
          }
@@ -155,7 +155,7 @@ public class CsvToBean<T> {
 
    private PropertyEditor getPropertyEditorValue(Class<?> cls) {
       if (editorMap == null) {
-         editorMap = new HashMap<>();
+         editorMap = new HashMap();
       }
 
       PropertyEditor editor = editorMap.get(cls);
