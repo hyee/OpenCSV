@@ -23,7 +23,7 @@ import java.io.Reader;
  * creating a Reader as there are so many possible values to be set it is
  * impossible to have constructors for all of them and keep backwards
  * compatibility with previous constructors.
- *
+ * <p/>
  * <code>
  * final CSVParser parser =
  * new CSVParserBuilder()
@@ -47,18 +47,17 @@ public class CSVReaderBuilder {
     private boolean keepCR;
     private boolean verifyReader = CSVReader.DEFAULT_VERIFY_READER;
 
-   /**
-    * Sets the reader to an underlying CSV source.
-    *
-    * @param reader the reader to an underlying CSV source.
-    */
-   public CSVReaderBuilder(
-         final Reader reader) {
-      if (reader == null) {
-         throw new IllegalArgumentException("Reader may not be null");
-      }
-      this.reader = reader;
-   }
+    /**
+     * Sets the reader to an underlying CSV source.
+     *
+     * @param reader the reader to an underlying CSV source.
+     */
+    public CSVReaderBuilder(final Reader reader) {
+        if (reader == null) {
+            throw new IllegalArgumentException("Reader may not be null");
+        }
+        this.reader = reader;
+    }
 
     /**
      * Used by unit tests.
@@ -88,16 +87,15 @@ public class CSVReaderBuilder {
     }
 
     /**
-    * Sets the line number to skip for start reading.
+     * Sets the line number to skip for start reading.
      *
      * @param skipLines the line number to skip for start reading.
      * @return the CSVReaderBuilder with skipLines set.
-    */
-    public CSVReaderBuilder withSkipLines(
-         final int skipLines) {
-      this.skipLines = (skipLines <= 0 ? 0 : skipLines);
-      return this;
-   }
+     */
+    public CSVReaderBuilder withSkipLines(final int skipLines) {
+        this.skipLines = (skipLines <= 0 ? 0 : skipLines);
+        return this;
+    }
 
 
     /**
@@ -105,23 +103,22 @@ public class CSVReaderBuilder {
      *
      * @param csvParser the parser to use to parse the input.
      * @return the CSVReaderBuilder with the CSVParser set.
-    */
-    public CSVReaderBuilder withCSVParser(
-         final /*@Nullable*/ CSVParser csvParser) {
-      this.csvParser = csvParser;
-       return this;
-   }
+     */
+    public CSVReaderBuilder withCSVParser(final /*@Nullable*/ CSVParser csvParser) {
+        this.csvParser = csvParser;
+        return this;
+    }
 
 
     /**
      * Creates the CSVParser.
+     *
      * @return the CSVParser based on the set criteria.
      */
     public CSVReader build() {
-      final CSVParser parser =
-            (csvParser != null ? csvParser : new CSVParser());
-       return new CSVReader(reader, skipLines, parser, keepCR, verifyReader);
-   }
+        final CSVParser parser = (csvParser != null ? csvParser : new CSVParser());
+        return new CSVReader(reader, skipLines, parser, keepCR, verifyReader);
+    }
 
     /**
      * Sets if the reader will keep or discard carriage returns.
@@ -145,10 +142,10 @@ public class CSVReaderBuilder {
 
     /**
      * Checks to see if the CSVReader should verify the reader state before reads or not.
-     *
+     * <p/>
      * This should be set to false if you are using some form of asynchronous reader (like readers created
      * by the java.nio.* classes).
-     *
+     * <p/>
      * The default value is true.
      *
      * @param verifyReader true if CSVReader should verify reader before each read, false otherwise.

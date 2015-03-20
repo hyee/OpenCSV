@@ -99,6 +99,16 @@ public class ResultSetHelperService implements ResultSetHelper {
                 case Types.SMALLINT:
                     value = "number";
                     break;
+                case Types.TIME:
+                case Types.DATE:
+                case Types.TIMESTAMP:
+                    value = "timestamp";
+                    break;
+                case -100:
+                case -101:
+                case -102:
+                    value = "timestamptz";
+                    break;
                 default:
                     value = "string";
             }

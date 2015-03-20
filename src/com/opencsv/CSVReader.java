@@ -100,8 +100,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @param escape    the character to use for escaping a separator or quote
      */
 
-    public CSVReader(Reader reader, char separator,
-                     char quotechar, char escape) {
+    public CSVReader(Reader reader, char separator, char quotechar, char escape) {
         this(reader, separator, quotechar, escape, DEFAULT_SKIP_LINES, CSVParser.DEFAULT_STRICT_QUOTES);
     }
 
@@ -156,9 +155,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @param ignoreLeadingWhiteSpace it true, parser should ignore white space before a quote in a field
      */
     public CSVReader(Reader reader, char separator, char quotechar, char escape, int line, boolean strictQuotes, boolean ignoreLeadingWhiteSpace) {
-        this(reader,
-                line,
-                new CSVParser(separator, quotechar, escape, strictQuotes, ignoreLeadingWhiteSpace));
+        this(reader, line, new CSVParser(separator, quotechar, escape, strictQuotes, ignoreLeadingWhiteSpace));
     }
 
     /**
@@ -173,10 +170,8 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @param ignoreLeadingWhiteSpace if true, parser should ignore white space before a quote in a field
      * @param keepCR                  if true the reader will keep carriage returns, otherwise it will discard them.
      */
-    public CSVReader(Reader reader, char separator, char quotechar, char escape, int line, boolean strictQuotes,
-                     boolean ignoreLeadingWhiteSpace, boolean keepCR) {
-        this(reader, line,
-                new CSVParser(separator, quotechar, escape, strictQuotes, ignoreLeadingWhiteSpace), keepCR, DEFAULT_VERIFY_READER);
+    public CSVReader(Reader reader, char separator, char quotechar, char escape, int line, boolean strictQuotes, boolean ignoreLeadingWhiteSpace, boolean keepCR) {
+        this(reader, line, new CSVParser(separator, quotechar, escape, strictQuotes, ignoreLeadingWhiteSpace), keepCR, DEFAULT_VERIFY_READER);
     }
 
     /**
@@ -193,23 +188,21 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     /**
      * Constructs CSVReader with supplied CSVParser.
      *
-     * @param reader    the reader to an underlying CSV source.
-     * @param line      the line number to skip for start reading
-     * @param csvParser the parser to use to parse input
-     * @param keepCR    true to keep carriage returns in data read, false otherwise
-     * @param verifyReader   true to verify reader before each read, false otherwise
+     * @param reader       the reader to an underlying CSV source.
+     * @param line         the line number to skip for start reading
+     * @param csvParser    the parser to use to parse input
+     * @param keepCR       true to keep carriage returns in data read, false otherwise
+     * @param verifyReader true to verify reader before each read, false otherwise
      */
     CSVReader(Reader reader, int line, CSVParser csvParser, boolean keepCR, boolean verifyReader) {
-        this.br =
-                (reader instanceof BufferedReader ?
-                        (BufferedReader) reader :
-                        new BufferedReader(reader));
+        this.br = (reader instanceof BufferedReader ? (BufferedReader) reader : new BufferedReader(reader));
         this.lineReader = new LineReader(br, keepCR);
         this.skipLines = line;
         this.parser = csvParser;
         this.keepCR = keepCR;
         this.verifyReader = verifyReader;
     }
+
     /**
      * @return the CSVParser used by the reader.
      */
@@ -286,7 +279,8 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
     /**
      * For multi line records this method combines the current result with the result from previous read(s).
-     * @param buffer - previous data read for this record
+     *
+     * @param buffer   - previous data read for this record
      * @param lastRead - latest data read for this record.
      * @return String array with union of the buffer and lastRead arrays.
      */
@@ -324,6 +318,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
     /**
      * Checks to see if the file is closed.
+     *
      * @return true if the reader can no longer be read from.
      */
     private boolean isClosed() {
@@ -348,6 +343,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
     /**
      * Creates an Iterator for processing the csv data.
+     *
      * @return an String[] iterator.
      */
     public Iterator<String[]> iterator() {

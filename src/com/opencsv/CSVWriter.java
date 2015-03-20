@@ -20,6 +20,10 @@ import java.io.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.GZIPOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * A very simple CSV writer released under a commercial-friendly license.
@@ -62,9 +66,15 @@ public class CSVWriter implements Closeable, Flushable {
     protected int buffeWidth;
     protected int lineWidth;
     protected String lineEnd;
+    protected String tableName;
+    protected String CSVFileName;
     protected StringBuilder sb;
+    protected DeflaterOutputStream zipStream;
+    protected String zipType = null;
+    protected String extensionName = "csv";
     protected ResultSetHelper resultService = new ResultSetHelperService();
-
+    protected String[] columnTypes;
+    protected String[] columnNames;
     protected int INITIAL_BUFFER_SIZE = 16384;
 
 
@@ -77,9 +87,35 @@ public class CSVWriter implements Closeable, Flushable {
         this(writer, DEFAULT_SEPARATOR);
     }
 
-    public CSVWriter(String fileName) throws IOException {
-        this(new FileWriter(fileName));
+    public CSVWriter(String fileName, char separator, char quotechar, char escapechar, String lineEnd) throws IOException {
+        //this(new FileWriter(fileName));
+        this(new FileWriter(fileName), separator, quotechar, escapechar, lineEnd);
+        this.CSVFileName = fileName;
+        tableName = new File(fileName).getName();
+        int index = tableName.lastIndexOf(".");
+        if (index > -1) {
+            String extName = tableName.substring(index + 1);
+            tableName = tableName.substring(0, index);
+            if (extName.equalsIgnoreCase("zip") || extName.equalsIgnoreCase("gz")) {
+                pw.close();
+                rawWriter.close();
+                FileOutputStream out = new FileOutputStream(fileName);
+                zipType = extName.toLowerCase();
+                if (zipType.equals("zip")) {
+                    ZipOutputStream zip = new ZipOutputStream(out);
+                    zip.putNextEntry(new ZipEntry(tableName + "." + extensionName));
+                    zipStream = zip;
+                } else zipStream = new GZIPOutputStream(out, true);
+                rawWriter = new OutputStreamWriter(out);
+                pw = new PrintWriter(rawWriter);
+            }
+        }
     }
+
+    public CSVWriter(String fileName) throws IOException {
+        this(fileName, DEFAULT_SEPARATOR, DEFAULT_QUOTE_CHARACTER, DEFAULT_ESCAPE_CHARACTER, DEFAULT_LINE_END);
+    }
+
 
     /**
      * Constructs CSVWriter with supplied separator.
@@ -181,10 +217,13 @@ public class CSVWriter implements Closeable, Flushable {
      *                         to be applied to values which contain the separator, escape,
      *                         quote or new line characters.
      */
-    public void writeAll(List<String[]> allLines, boolean applyQuotesToAll) throws IOException {
+    public int writeAll(List<String[]> allLines, boolean applyQuotesToAll) throws IOException {
+        int i = 1;
         for (String[] line : allLines) {
             writeNext(line, applyQuotesToAll);
+            ++i;
         }
+        return i;
     }
 
     /**
@@ -194,10 +233,13 @@ public class CSVWriter implements Closeable, Flushable {
      * @param allLines a List of String[], with each String[] representing a line of
      *                 the file.
      */
-    public void writeAll(List<String[]> allLines) throws IOException {
+    public int writeAll(List<String[]> allLines) throws IOException {
+        int i = 1;
         for (String[] line : allLines) {
             writeNext(line);
+            ++i;
         }
+        return i;
     }
 
     /**
@@ -207,8 +249,9 @@ public class CSVWriter implements Closeable, Flushable {
      * @throws SQLException - thrown by ResultSet::getColumnNames
      */
     protected void writeColumnNames(ResultSet rs) throws SQLException, IOException {
-
-        writeNext(resultService.getColumnNames(rs));
+        columnNames = resultService.getColumnNames(rs);
+        columnTypes = resultService.getColumnTypes(rs);
+        writeNext(columnNames);
     }
 
     /**
@@ -221,8 +264,8 @@ public class CSVWriter implements Closeable, Flushable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public void writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException {
-        writeAll(rs, includeColumnNames, false);
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException {
+        return writeAll(rs, includeColumnNames, true);
     }
 
     /**
@@ -236,15 +279,20 @@ public class CSVWriter implements Closeable, Flushable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public void writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
         if (includeColumnNames) {
             writeColumnNames(rs);
         }
+        int i = 0;
         while (rs.next()) {
+            ++i;
             writeNext(resultService.getColumnValues(rs, trim));
         }
 
         flush();
+        if (CSVFileName != null)
+            createOracleCtlFileFromHeaders(CSVFileName, resultService.getColumnNames(rs), quotechar);
+        return i;
     }
 
     /**
@@ -256,11 +304,12 @@ public class CSVWriter implements Closeable, Flushable {
      *                         to values which contain the separator, escape, quote or new line characters.
      */
     public void writeNext(String[] nextLine, boolean applyQuotesToAll) throws IOException {
-
         if (nextLine == null) {
             return;
         }
+
         lineWidth = 0;
+
         for (int i = 0; i < nextLine.length; i++) {
 
             if (i != 0) {
@@ -268,10 +317,6 @@ public class CSVWriter implements Closeable, Flushable {
             }
 
             String nextElement = nextLine[i];
-
-            if (nextElement == null) {
-                continue;
-            }
 
             Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
 
@@ -301,7 +346,7 @@ public class CSVWriter implements Closeable, Flushable {
      *                 entry.
      */
     public void writeNext(String[] nextLine) throws IOException {
-        writeNext(nextLine, true);
+        writeNext(nextLine, false);
     }
 
     /**
@@ -351,8 +396,13 @@ public class CSVWriter implements Closeable, Flushable {
      */
     public void flush() throws IOException {
         if (buffeWidth == 0) return;
-        pw.write(sb.toString());
-        pw.flush();
+        if (zipStream != null) {
+            zipStream.write(sb.toString().getBytes());
+            zipStream.flush();
+        } else {
+            pw.write(sb.toString());
+            pw.flush();
+        }
         buffeWidth = 0;
         sb.setLength(0);
     }
@@ -364,8 +414,40 @@ public class CSVWriter implements Closeable, Flushable {
      */
     public void close() throws IOException {
         flush();
+        if (zipStream != null) {
+            if (zipType.equals("zip")) ((ZipOutputStream) zipStream).finish();
+            if (!zipType.equals("zip")) ((GZIPOutputStream) zipStream).finish();
+            zipStream.close();
+            zipStream = null;
+        }
+        pw.flush();
         pw.close();
         rawWriter.close();
+    }
+
+    public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
+        String FileName = new File(CSVFileName).getParentFile().getAbsolutePath();
+        FileName = FileName + File.separator + tableName + ".ctl";
+        FileWriter writer = new FileWriter(FileName);
+        StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
+        b.append("OPTIONS (SKIP=1)\nLOAD DATA\n");
+        b.append("INFILE      ").append(tableName).append(".csv").append("\n");
+        b.append("BADFILE     ").append(tableName).append(".bad").append("\n");
+        b.append("DISCARDFILE ").append(tableName).append(".dsc").append("\n");
+        b.append("APPEND INTO TABLE ").append(tableName).append("\n");
+        b.append("FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
+        for (int i = 0; i < titles.length; i++) {
+            if (i > 0) b.append(",\n");
+            b.append("    ").append(String.format("%-32s",titles[i]));
+            if (columnTypes[i].equalsIgnoreCase("timestamp"))
+                b.append("\"TO_DATE(:").append(titles[i]).append(",'YYYY-MM-DD HH24:MI:SS')\"");
+            if (columnTypes[i].equalsIgnoreCase("timestamptz"))
+                b.append("\"TO_TIMESTAMP(:").append(titles[i]).append(",'YYYY-MM-DD HH24:MI:SSXFF TZH')\"");
+        }
+        b.append("\n)");
+        writer.write(b.toString());
+        writer.flush();
+        writer.close();
     }
 
     /**

@@ -170,8 +170,7 @@ public class CSVParser {
      * @param ignoreLeadingWhiteSpace if true, white space in front of a quote in a field is ignored
      * @param ignoreQuotations        if true, treat quotations like any other character.
      */
-    public CSVParser(char separator, char quotechar, char escape, boolean strictQuotes, boolean ignoreLeadingWhiteSpace,
-                     boolean ignoreQuotations) {
+    public CSVParser(char separator, char quotechar, char escape, boolean strictQuotes, boolean ignoreLeadingWhiteSpace, boolean ignoreQuotations) {
         if (anyCharactersAreTheSame(separator, quotechar, escape)) {
             throw new UnsupportedOperationException("The separator, quote, and escape characters must be different!");
         }
@@ -243,6 +242,7 @@ public class CSVParser {
 
     /**
      * checks that the two characters are the same and are not the defined NULL_CHARACTER.
+     *
      * @param c1 first character
      * @param c2 second character
      * @return true if both characters are the same and are not the defined NULL_CHARACTER
@@ -286,7 +286,7 @@ public class CSVParser {
      * Parses an incoming String and returns an array of elements.
      *
      * @param nextLine the string to parse
-     * @param multi Does it take multiple lines to form a single record.
+     * @param multi    Does it take multiple lines to form a single record.
      * @return the comma-tokenized list of elements, or null if nextLine is null
      * @throws IOException if bad things happen during the read
      */
@@ -403,7 +403,7 @@ public class CSVParser {
 
     /**
      * Checks to see if the character after the index is a quotation character.
-     *
+     * <p/>
      * precondition: the current character is a quote or an escape
      *
      * @param nextLine the current line
@@ -452,7 +452,7 @@ public class CSVParser {
      * Checks to see if the character after the current index in a String is an escapable character.
      * Meaning the next character is either a quotation character or the escape char and you are inside
      * quotes.
-     *
+     * <p/>
      * precondition: the current character is an escape
      *
      * @param nextLine the current line
@@ -468,7 +468,7 @@ public class CSVParser {
 
     /**
      * Checks if every element is the character sequence is whitespace.
-     *
+     * <p/>
      * precondition: sb.length() is greater than 0
      *
      * @param sb A sequence of characters to examine
