@@ -401,10 +401,12 @@ public class CSVWriter implements Closeable, Flushable {
             zipStream.flush();
         } else {
             pw.write(sb.toString());
-            pw.flush();
         }
+        pw.flush();
         buffeWidth = 0;
         sb.setLength(0);
+        System.gc ();
+        System.runFinalization ();
     }
 
     /**
@@ -415,8 +417,7 @@ public class CSVWriter implements Closeable, Flushable {
     public void close() throws IOException {
         flush();
         if (zipStream != null) {
-            if (zipType.equals("zip")) ((ZipOutputStream) zipStream).finish();
-            if (!zipType.equals("zip")) ((GZIPOutputStream) zipStream).finish();
+            zipStream.finish();
             zipStream.close();
             zipStream = null;
         }
