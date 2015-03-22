@@ -282,16 +282,16 @@ public class CSVWriter implements Closeable, Flushable {
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
         if (includeColumnNames) {
             writeColumnNames(rs);
+            if (CSVFileName != null)
+                createOracleCtlFileFromHeaders(CSVFileName,columnNames, quotechar);
         }
+
         int i = 0;
         while (rs.next()) {
             ++i;
             writeNext(resultService.getColumnValues(rs, trim));
         }
-
         flush();
-        if (CSVFileName != null)
-            createOracleCtlFileFromHeaders(CSVFileName, resultService.getColumnNames(rs), quotechar);
         return i;
     }
 
