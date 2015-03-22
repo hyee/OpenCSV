@@ -79,7 +79,7 @@ public class SQLWriter extends CSVWriter {
         buffeWidth = 0;
         lineWidth = 0;
         this.maxLineWidth = maxLineWidth;
-        add(fileHeader).add(lineEnd);
+        add(fileHeader==null?"":fileHeader).add(lineEnd);
     }
 
     public void setFileHead(String header) {
