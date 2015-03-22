@@ -400,9 +400,9 @@ public class CSVWriter implements Closeable, Flushable {
             zipStream.write(sb.toString().getBytes());
             zipStream.flush();
         } else {
-            pw.write(sb.toString());
+            rawWriter.write(sb.toString());
         }
-        pw.flush();
+        rawWriter.flush();
         buffeWidth = 0;
         sb.setLength(0);
         System.gc ();
@@ -422,6 +422,7 @@ public class CSVWriter implements Closeable, Flushable {
             zipStream = null;
         }
         pw.flush();
+        rawWriter.flush();
         pw.close();
         rawWriter.close();
     }
