@@ -13,7 +13,6 @@ public class SQLWriter extends CSVWriter {
     protected String columns;
     protected int initSize;
     private int maxLineWidth;
-    private String tableName = "<table>";
     private String fileHeader = "";
 
     public SQLWriter(Writer writer) {
@@ -123,7 +122,7 @@ public class SQLWriter extends CSVWriter {
                         types[j] = columnTypes[i];
                     }
             columnTypes = types;
-            createOracleCtlFileFromHeaders(CSVFileName, columnNames, reader.getParser().getQuotechar());
+            createOracleCtlFileFromHeaders(CSVFileName, array, reader.getParser().getQuotechar());
             columnNames = null;
         }
         columnTypes = types;
