@@ -106,7 +106,7 @@ public class SQLWriter extends CSVWriter {
     }
 
     public int writeAll2SQL(String CSVFileSource) throws IOException {
-        CSVFileName = CSVFileSource;
+        this.CSVFileName = CSVFileSource;
         return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
     }
 

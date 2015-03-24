@@ -93,6 +93,7 @@ public class CSVWriter implements Closeable, Flushable {
         this.CSVFileName = fileName;
         tableName = new File(fileName).getName();
         int index = tableName.lastIndexOf(".");
+        if(quotechar=='\'' && escapechar==quotechar) extensionName="sql";
         if (index > -1) {
             String extName = tableName.substring(index + 1);
             tableName = tableName.substring(0, index);
@@ -428,12 +429,12 @@ public class CSVWriter implements Closeable, Flushable {
     }
 
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
-        String FileName = new File(CSVFileName).getParentFile().getAbsolutePath();
-        FileName = FileName + File.separator + tableName + ".ctl";
+        File file= new File(CSVFileName);
+        String FileName =file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
         b.append("OPTIONS (SKIP=1)\nLOAD DATA\n");
-        b.append("INFILE      ").append(tableName).append(".csv").append("\n");
+        b.append("INFILE      ").append(file.getName()).append("\n");
         b.append("BADFILE     ").append(tableName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(tableName).append(".dsc").append("\n");
         b.append("APPEND INTO TABLE ").append(tableName).append("\n");
