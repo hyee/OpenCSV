@@ -39,15 +39,10 @@ public class ResultSetHelperService implements ResultSetHelper {
 
     static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     static final String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss";
-
-    static NumberFormat nf = java.text.NumberFormat.getInstance();
-
     /**
      * Default Constructor.
      */
-    public ResultSetHelperService() {
-        nf.setGroupingUsed(false);
-    }
+    public ResultSetHelperService() {}
 
     private static String read(Clob c) throws SQLException, IOException {
         StringBuilder sb = new StringBuilder((int) c.length());
@@ -282,7 +277,7 @@ public class ResultSetHelperService implements ResultSetHelper {
             case Types.REAL:
             case Types.NUMERIC:
                 //value = handleBigDecimal(rs.getBigDecimal(colIndex));
-                value = nf.format(rs.getDouble(colIndex));
+                value = handleObject(rs.getObject(colIndex));
                 break;
             case Types.INTEGER:
             case Types.TINYINT:
