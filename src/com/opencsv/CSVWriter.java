@@ -100,11 +100,13 @@ public class CSVWriter implements Closeable, Flushable {
             if (extName.equalsIgnoreCase("zip") || extName.equalsIgnoreCase("gz")) {
                 pw.close();
                 rawWriter.close();
-                FileOutputStream out = new FileOutputStream(fileName);
                 zipType = extName.toLowerCase();
+                //if (zipType.equals("gz")) fileName=tableName+".csv.gz";
+                if(tableName.toLowerCase().endsWith(".csv")) tableName=tableName.substring(0,tableName.length()-4);
+                FileOutputStream out = new FileOutputStream(fileName);
                 if (zipType.equals("zip")) {
                     ZipOutputStream zip = new ZipOutputStream(out);
-                    zip.putNextEntry(new ZipEntry(tableName + "." + extensionName));
+                    zip.putNextEntry(new ZipEntry(tableName+ "." + extensionName));
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(out, true);
                 rawWriter = new OutputStreamWriter(out);
@@ -433,8 +435,8 @@ public class CSVWriter implements Closeable, Flushable {
         String FileName =file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
-        b.append("OPTIONS (SKIP=1)\nLOAD DATA\n");
-        b.append("INFILE      ").append(file.getName()).append("\n");
+        b.append("OPTIONS (SKIP=1, ROWS=1000, BINDSIZE=256000, STREAMSIZE=32000000, ERRORS=1000, READSIZE=8388608, DIRECT=FALSE)\nLOAD DATA\n");
+        b.append("INFILE      ").append(tableName).append(".csv\n");
         b.append("BADFILE     ").append(tableName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(tableName).append(".dsc").append("\n");
         b.append("APPEND INTO TABLE ").append(tableName).append("\n");
