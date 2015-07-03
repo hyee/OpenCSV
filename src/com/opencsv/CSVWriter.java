@@ -19,6 +19,8 @@ package com.opencsv;
 import java.io.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
@@ -65,8 +67,11 @@ public class CSVWriter implements Closeable, Flushable {
     protected char escapechar;
     protected int buffeWidth;
     protected int lineWidth;
+    protected int totalRows;
+    protected int incrRows;
     protected String lineEnd;
     protected String tableName;
+    protected PrintWriter logWriter;
     protected String CSVFileName;
     protected StringBuilder sb;
     protected DeflaterOutputStream zipStream;
@@ -75,7 +80,7 @@ public class CSVWriter implements Closeable, Flushable {
     protected ResultSetHelper resultService = new ResultSetHelperService();
     protected String[] columnTypes;
     protected String[] columnNames;
-    protected int INITIAL_BUFFER_SIZE = 16384;
+    protected int INITIAL_BUFFER_SIZE = 2000000;
 
 
     /**
@@ -91,7 +96,10 @@ public class CSVWriter implements Closeable, Flushable {
         //this(new FileWriter(fileName));
         this(new FileWriter(fileName), separator, quotechar, escapechar, lineEnd);
         this.CSVFileName = fileName;
-        tableName = new File(fileName).getName();
+        File file=new File(this.CSVFileName);
+        tableName = file.getName();
+        totalRows = 0;
+        incrRows  = 0 ;
         int index = tableName.lastIndexOf(".");
         if(quotechar=='\'' && escapechar==quotechar) extensionName="sql";
         if (index > -1) {
@@ -113,6 +121,7 @@ public class CSVWriter implements Closeable, Flushable {
                 pw = new PrintWriter(rawWriter);
             }
         }
+        logWriter = new PrintWriter(file.getParentFile().getAbsolutePath() + File.separator + tableName + ".log");
     }
 
     public CSVWriter(String fileName) throws IOException {
@@ -210,6 +219,12 @@ public class CSVWriter implements Closeable, Flushable {
         return add(sbf.toString());
     }
 
+    protected void writeLog(int rows) {
+        logWriter.write(String.format("%s: %d rows extracted, total is %d\n",new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()),rows-incrRows, rows));
+        logWriter.flush();
+        incrRows=rows;
+    }
+
     /**
      * Writes the entire list to a CSV file. The list is assumed to be a
      * String[]
@@ -221,12 +236,11 @@ public class CSVWriter implements Closeable, Flushable {
      *                         quote or new line characters.
      */
     public int writeAll(List<String[]> allLines, boolean applyQuotesToAll) throws IOException {
-        int i = 1;
         for (String[] line : allLines) {
             writeNext(line, applyQuotesToAll);
-            ++i;
         }
-        return i;
+        flush();
+        return totalRows;
     }
 
     /**
@@ -237,12 +251,11 @@ public class CSVWriter implements Closeable, Flushable {
      *                 the file.
      */
     public int writeAll(List<String[]> allLines) throws IOException {
-        int i = 1;
         for (String[] line : allLines) {
             writeNext(line);
-            ++i;
         }
-        return i;
+        flush();
+        return totalRows;
     }
 
     /**
@@ -288,14 +301,11 @@ public class CSVWriter implements Closeable, Flushable {
             if (CSVFileName != null)
                 createOracleCtlFileFromHeaders(CSVFileName,columnNames, quotechar);
         }
-
-        int i = 0;
         while (rs.next()) {
-            ++i;
             writeNext(resultService.getColumnValues(rs, trim));
         }
         flush();
-        return i;
+        return totalRows;
     }
 
     /**
@@ -310,7 +320,7 @@ public class CSVWriter implements Closeable, Flushable {
         if (nextLine == null) {
             return;
         }
-
+        if(totalRows==0) writeLog(0);
         lineWidth = 0;
 
         for (int i = 0; i < nextLine.length; i++) {
@@ -339,6 +349,7 @@ public class CSVWriter implements Closeable, Flushable {
         }
 
         add(lineEnd);
+        ++totalRows;
         if (buffeWidth >= INITIAL_BUFFER_SIZE) flush();
     }
 
@@ -410,6 +421,7 @@ public class CSVWriter implements Closeable, Flushable {
         sb.setLength(0);
         System.gc ();
         System.runFinalization ();
+        writeLog(totalRows);
     }
 
     /**
@@ -428,6 +440,7 @@ public class CSVWriter implements Closeable, Flushable {
         rawWriter.flush();
         pw.close();
         rawWriter.close();
+        logWriter.close();
     }
 
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
@@ -435,7 +448,7 @@ public class CSVWriter implements Closeable, Flushable {
         String FileName =file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
-        b.append("OPTIONS (SKIP=1, ROWS=1000, BINDSIZE=256000, STREAMSIZE=32000000, ERRORS=1000, READSIZE=8388608, DIRECT=FALSE)\nLOAD DATA\n");
+        b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
         b.append("INFILE      ").append(tableName).append(".csv\n");
         b.append("BADFILE     ").append(tableName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(tableName).append(".dsc").append("\n");

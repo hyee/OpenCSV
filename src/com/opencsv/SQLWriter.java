@@ -38,6 +38,7 @@ public class SQLWriter extends CSVWriter {
 
     public void writeNextRow(String[] nextLine) throws IOException {
         if (nextLine == null) return;
+        if(totalRows==0) writeLog(0);
         add(columns);
         lineWidth = 2;
         for (int i = 0; i < nextLine.length; i++) {
@@ -68,6 +69,7 @@ public class SQLWriter extends CSVWriter {
             if (isQuote) add(quotechar);
         }
         add(");").add(lineEnd);
+        ++totalRows;
         if (buffeWidth >= INITIAL_BUFFER_SIZE - maxLineWidth) flush();
     }
 
@@ -92,13 +94,11 @@ public class SQLWriter extends CSVWriter {
     public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException {
         init(resultService.getColumnNames(rs), headerEncloser, maxLineWidth);
         columnTypes = resultService.getColumnTypes(rs);
-        int i = 0;
         while (rs.next()) {
-            ++i;
             writeNextRow(resultService.getColumnValues(rs, false));
         }
-        close();
-        return i;
+        flush();
+        return totalRows;
     }
 
     public int writeAll2SQL(CSVReader reader) throws IOException {
@@ -127,13 +127,11 @@ public class SQLWriter extends CSVWriter {
         }
         columnTypes = types;
         init(array, headerEncloser, maxLineWidth);
-        int i = -1;
         while ((array = reader.readNext()) != null) {
-            ++i;
             writeNextRow(array);
         }
-        close();
+        flush();
 
-        return i;
+        return totalRows;
     }
 }
