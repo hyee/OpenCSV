@@ -16,13 +16,10 @@ package com.opencsv;
  */
 
 import java.io.IOException;
-import java.io.Reader;
-import java.math.BigDecimal;
 import java.sql.*;
-import java.text.NumberFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.text.SimpleDateFormat;
 
 /**
  * helper class for processing JDBC ResultSet objects.
@@ -36,24 +33,19 @@ public class ResultSetHelperService implements ResultSetHelper {
     static final int NCHAR = -15;
     static final int LONGNVARCHAR = -16;
     static final int NCLOB = 2011;
-
+    static final int BLOB_MAX_SIZE = 32767;
     static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    static final String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    static final String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
+    static final String DEFAULT_TIMESTAMPTZ_FORMAT = "yyyy-MM-dd HH:mm:ss.S X";
+    private SimpleDateFormat dateFormat;
+    private SimpleDateFormat timeFormat;
+    private SimpleDateFormat timeTZFormat;
+    private StringBuilder stringBuilder =new StringBuilder(32767);
     /**
      * Default Constructor.
      */
     public ResultSetHelperService() {}
 
-    private static String read(Clob c) throws SQLException, IOException {
-        StringBuilder sb = new StringBuilder((int) c.length());
-        Reader r = c.getCharacterStream();
-        char[] cbuf = new char[CLOBBUFFERSIZE];
-        int n;
-        while ((n = r.read(cbuf, 0, cbuf.length)) != -1) {
-            sb.append(cbuf, 0, n);
-        }
-        return sb.toString();
-    }
 
     /**
      * Returns the column names from the result set.
@@ -78,7 +70,7 @@ public class ResultSetHelperService implements ResultSetHelper {
         List<String> names = new ArrayList<String>();
         ResultSetMetaData metadata = rs.getMetaData();
         for (int i = 0; i < metadata.getColumnCount(); i++) {
-            String value = "";
+            String value;
             switch (metadata.getColumnType(i + 1)) {
                 case Types.BOOLEAN:
                     value = "boolean";
@@ -96,10 +88,12 @@ public class ResultSetHelperService implements ResultSetHelper {
                     break;
                 case Types.TIME:
                 case Types.DATE:
+                    value = "date";
+                    break;
                 case Types.TIMESTAMP:
+                case -100:
                     value = "timestamp";
                     break;
-                case -100:
                 case -101:
                 case -102:
                     value = "timestamptz";
@@ -153,11 +147,9 @@ public class ResultSetHelperService implements ResultSetHelper {
     public String[] getColumnValues(ResultSet rs, boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         List<String> values = new ArrayList<String>();
         ResultSetMetaData metadata = rs.getMetaData();
-
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             values.add(getColumnValue(rs, metadata.getColumnType(i + 1), i + 1, trim, dateFormatString, timeFormatString));
         }
-
         String[] valueArray = new String[values.size()];
         return values.toArray(valueArray);
     }
@@ -172,86 +164,34 @@ public class ResultSetHelperService implements ResultSetHelper {
         return obj == null ? "" : String.valueOf(obj);
     }
 
-    /**
-     * changes a BigDecimal to String.
-     *
-     * @param decimal - BigDecimal to format
-     * @return String representation of a BigDecimal or empty string if null
-     */
-    protected String handleBigDecimal(BigDecimal decimal) {
-        return decimal == null ? "" : decimal.toString();
-    }
 
-    /**
-     * Retrieves the string representation of an Long value from the result set.
-     *
-     * @param rs          - Result set containing the data.
-     * @param columnIndex - index to the column of the long.
-     * @return - the string representation of the long
-     * @throws SQLException - thrown by the result set on error.
-     */
-    protected String handleLong(ResultSet rs, int columnIndex) throws SQLException {
-        long lv = rs.getLong(columnIndex);
-        return rs.wasNull() ? "" : Long.toString(lv);
-    }
-
-    /**
-     * Retrieves the string representation of an Integer value from the result set.
-     *
-     * @param rs          - Result set containing the data.
-     * @param columnIndex - index to the column of the integer.
-     * @return - string representation of the Integer.
-     * @throws SQLException - returned from the result set on error.
-     */
-    protected String handleInteger(ResultSet rs, int columnIndex) throws SQLException {
-        int i = rs.getInt(columnIndex);
-        return rs.wasNull() ? "" : Integer.toString(i);
-    }
-
-    /**
-     * Retrieves a date from the result set.
-     *
-     * @param rs               - Result set containing the data
-     * @param columnIndex      - index to the column of the date
-     * @param dateFormatString - format for the date
-     * @return - formatted date.
-     * @throws SQLException - returned from the result set on error.
-     */
     protected String handleDate(ResultSet rs, int columnIndex, String dateFormatString) throws SQLException {
         java.sql.Date date = rs.getDate(columnIndex);
-        String value = null;
-        if (date != null) {
-            SimpleDateFormat dateFormat = new SimpleDateFormat(dateFormatString);
-            value = dateFormat.format(date);
+        if(dateFormat==null) {
+            dateFormat=new SimpleDateFormat(dateFormatString);
         }
-        return value;
+        return date==null? null:dateFormat.format(date);
     }
 
-    /**
-     * Return time read from ResultSet.
-     *
-     * @param time time read from ResultSet
-     * @return String version of time or null if time is null.
-     */
-    protected String handleTime(Time time) {
-        return time == null ? null : time.toString();
-    }
 
-    /**
-     * The formatted timestamp.
-     *
-     * @param timestamp             - timestamp read from resultset
-     * @param timestampFormatString - format string
-     * @return - formatted time stamp.
-     */
-    protected String handleTimestamp(Timestamp timestamp, String timestampFormatString) {
-        SimpleDateFormat timeFormat = new SimpleDateFormat(timestampFormatString);
+    protected String handleTimestamp(ResultSet rs, int columnIndex, String timestampFormatString)  throws SQLException {
+        java.sql.Timestamp timestamp=rs.getTimestamp(columnIndex);
+        if(timeFormat==null) {
+            timeFormat=new SimpleDateFormat(timestampFormatString);
+        }
         return timestamp == null ? null : timeFormat.format(timestamp);
+    }
+
+    protected String handleTimestampTZ(ResultSet rs, int columnIndex, String timestampFormatString)  throws SQLException {
+        java.sql.Timestamp timestamp=rs.getTimestamp(columnIndex);
+        if(timeFormat==null) {
+            timeTZFormat=new SimpleDateFormat(DEFAULT_TIMESTAMPTZ_FORMAT);
+        }
+        return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
 
     private String getColumnValue(ResultSet rs, int colType, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         String value = "";
-
         switch (colType) {
             case Types.BIT:
             case Types.JAVA_OBJECT:
@@ -261,50 +201,43 @@ public class ResultSetHelperService implements ResultSetHelper {
                 boolean b = rs.getBoolean(colIndex);
                 value = Boolean.valueOf(b).toString();
                 break;
-            case NCLOB: // todo : use rs.getNClob
+            case Types.BLOB:
+                Blob bl=rs.getBlob(colIndex);
+                if (bl != null) {
+                    int len=(int)bl.length();
+                    byte[] src=bl.getBytes(1,len>BLOB_MAX_SIZE?BLOB_MAX_SIZE:len);
+                    bl.free();
+                    for (int i = 0; i < src.length; i++) {
+                        int v = src[i] & 0xFF;
+                        String hv = Integer.toHexString(v);
+                        if (hv.length() < 2) {
+                            stringBuilder.append(0);
+                        }
+                        stringBuilder.append(hv);
+                    }
+                    value= stringBuilder.toString().toLowerCase();
+                    stringBuilder.setLength(0);
+                }
+                break;
+            case Types.NCLOB:
             case Types.CLOB:
                 Clob c = rs.getClob(colIndex);
                 if (c != null) {
-                    value = read(c);
+                    value=c.getSubString(1,(int)c.length());
+                    c.free();
                 }
-                break;
-            case Types.BIGINT:
-                value = handleLong(rs, colIndex);
-                break;
-            case Types.DECIMAL:
-            case Types.DOUBLE:
-            case Types.FLOAT:
-            case Types.REAL:
-            case Types.NUMERIC:
-                //value = handleBigDecimal(rs.getBigDecimal(colIndex));
-                value = handleObject(rs.getObject(colIndex));
-                break;
-            case Types.INTEGER:
-            case Types.TINYINT:
-            case Types.SMALLINT:
-                value = handleInteger(rs, colIndex);
                 break;
             case Types.DATE:
+            case Types.TIME:
                 value = handleDate(rs, colIndex, dateFormatString);
                 break;
-            case Types.TIME:
-                value = handleTime(rs.getTime(colIndex));
-                break;
             case Types.TIMESTAMP:
-                value = handleTimestamp(rs.getTimestamp(colIndex), timestampFormatString);
+            case -100:
+                value = handleTimestamp(rs, colIndex, timestampFormatString);
                 break;
-            case NVARCHAR: // todo : use rs.getNString
-            case NCHAR: // todo : use rs.getNString
-            case LONGNVARCHAR: // todo : use rs.getNString
-            case Types.LONGVARCHAR:
-            case Types.VARCHAR:
-            case Types.CHAR:
-                String columnValue = rs.getString(colIndex);
-                if (trim && columnValue != null) {
-                    value = columnValue.trim();
-                } else {
-                    value = columnValue;
-                }
+            case -101:
+            case -102:
+                value = handleTimestampTZ(rs, colIndex, timestampFormatString);
                 break;
             default:
                 value = rs.getString(colIndex);

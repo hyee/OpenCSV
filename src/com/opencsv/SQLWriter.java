@@ -14,17 +14,18 @@ public class SQLWriter extends CSVWriter {
     protected int initSize;
     private int maxLineWidth;
     private String fileHeader = "";
+    static final int SQL_BUFFER_SIZE=8000000;
 
     public SQLWriter(Writer writer) {
         super(writer, ',', '\'', '\'', "\n");
         extensionName = "sql";
-        setBufferSize(4000000);
+        setBufferSize(SQL_BUFFER_SIZE);
     }
 
     public SQLWriter(String fileName) throws IOException {
         super(fileName, ',', '\'', '\'', "\n");
         extensionName = "sql";
-        setBufferSize(4000000);
+        setBufferSize(SQL_BUFFER_SIZE);
     }
 
     public void setCSVDataTypes(ResultSet rs) throws SQLException {
@@ -94,6 +95,7 @@ public class SQLWriter extends CSVWriter {
     public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException {
         init(resultService.getColumnNames(rs), headerEncloser, maxLineWidth);
         columnTypes = resultService.getColumnTypes(rs);
+        rs.setFetchSize(RESULT_FETCH_SIZE);
         while (rs.next()) {
             writeNextRow(resultService.getColumnValues(rs, false));
         }

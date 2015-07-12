@@ -80,7 +80,8 @@ public class CSVWriter implements Closeable, Flushable {
     protected ResultSetHelper resultService = new ResultSetHelperService();
     protected String[] columnTypes;
     protected String[] columnNames;
-    protected int INITIAL_BUFFER_SIZE = 2000000;
+    protected int INITIAL_BUFFER_SIZE = 4000000;
+    protected int RESULT_FETCH_SIZE=32767;
 
 
     /**
@@ -122,6 +123,7 @@ public class CSVWriter implements Closeable, Flushable {
             }
         }
         logWriter = new PrintWriter(file.getParentFile().getAbsolutePath() + File.separator + tableName + ".log");
+        //logWriter = new PrintWriter(System.err);
     }
 
     public CSVWriter(String fileName) throws IOException {
@@ -220,7 +222,7 @@ public class CSVWriter implements Closeable, Flushable {
     }
 
     protected void writeLog(int rows) {
-        logWriter.write(String.format("%s: %d rows extracted, total is %d\n",new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()),rows-incrRows, rows));
+        logWriter.write(String.format("    %s: %d rows extracted, total is %d\n",new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()),rows-incrRows, rows));
         logWriter.flush();
         incrRows=rows;
     }
@@ -301,6 +303,7 @@ public class CSVWriter implements Closeable, Flushable {
             if (CSVFileName != null)
                 createOracleCtlFileFromHeaders(CSVFileName,columnNames, quotechar);
         }
+        rs.setFetchSize(RESULT_FETCH_SIZE);
         while (rs.next()) {
             writeNext(resultService.getColumnValues(rs, trim));
         }
@@ -350,7 +353,7 @@ public class CSVWriter implements Closeable, Flushable {
 
         add(lineEnd);
         ++totalRows;
-        if (buffeWidth >= INITIAL_BUFFER_SIZE) flush();
+        if (buffeWidth >= INITIAL_BUFFER_SIZE-1024) flush();
     }
 
     /**
@@ -446,6 +449,7 @@ public class CSVWriter implements Closeable, Flushable {
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
         File file= new File(CSVFileName);
         String FileName =file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
+        String ColName;
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
@@ -456,11 +460,15 @@ public class CSVWriter implements Closeable, Flushable {
         b.append("FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (i > 0) b.append(",\n");
-            b.append("    ").append(String.format("%-32s",titles[i]));
-            if (columnTypes[i].equalsIgnoreCase("timestamp"))
-                b.append("\"TO_DATE(:").append(titles[i]).append(",'YYYY-MM-DD HH24:MI:SS')\"");
-            if (columnTypes[i].equalsIgnoreCase("timestamptz"))
-                b.append("\"TO_TIMESTAMP(:").append(titles[i]).append(",'YYYY-MM-DD HH24:MI:SSXFF TZH')\"");
+            ColName='"'+titles[i]+'"';
+            b.append("    ").append(String.format("%-32s",ColName));
+            if (columnTypes[i].equalsIgnoreCase("date"))
+                b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
+            else if (columnTypes[i].equalsIgnoreCase("timestamp"))
+                b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
+            else if (columnTypes[i].equalsIgnoreCase("timestamptz"))
+                b.append("TIMESTAMP WITH TIME ZONE \"YYYY-MM-DD HH24:MI:SSXFF TZH\" ");
+            b.append(String.format("NULLIF %s=BLANKS",ColName));
         }
         b.append("\n)");
         writer.write(b.toString());
