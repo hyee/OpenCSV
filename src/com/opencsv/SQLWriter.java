@@ -10,11 +10,11 @@ import java.sql.SQLException;
 
 public class SQLWriter extends CSVWriter {
 
+    static final int SQL_BUFFER_SIZE = 8000000;
     protected String columns;
     protected int initSize;
     private int maxLineWidth;
     private String fileHeader = "";
-    static final int SQL_BUFFER_SIZE=8000000;
 
     public SQLWriter(Writer writer) {
         super(writer, ',', '\'', '\'', "\n");
@@ -39,7 +39,7 @@ public class SQLWriter extends CSVWriter {
 
     public void writeNextRow(String[] nextLine) throws IOException {
         if (nextLine == null) return;
-        if(totalRows==0) writeLog(0);
+        if (totalRows == 0) writeLog(0);
         add(columns);
         lineWidth = 2;
         for (int i = 0; i < nextLine.length; i++) {
@@ -81,7 +81,7 @@ public class SQLWriter extends CSVWriter {
         buffeWidth = 0;
         lineWidth = 0;
         this.maxLineWidth = maxLineWidth;
-        add(fileHeader==null?"":fileHeader).add(lineEnd);
+        add(fileHeader == null ? "" : fileHeader).add(lineEnd);
     }
 
     public void setFileHead(String header) {

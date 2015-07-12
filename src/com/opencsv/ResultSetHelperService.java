@@ -17,9 +17,10 @@ package com.opencsv;
 
 import java.io.IOException;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * helper class for processing JDBC ResultSet objects.
@@ -29,10 +30,7 @@ public class ResultSetHelperService implements ResultSetHelper {
 
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
-    static final int NVARCHAR = -9;
-    static final int NCHAR = -15;
-    static final int LONGNVARCHAR = -16;
-    static final int NCLOB = 2011;
+
     static final int BLOB_MAX_SIZE = 32767;
     static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     static final String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
@@ -40,11 +38,14 @@ public class ResultSetHelperService implements ResultSetHelper {
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
-    private StringBuilder stringBuilder =new StringBuilder(32767);
+    private StringBuilder stringBuilder = new StringBuilder(32767);
+    private HashMap<ResultSet, Integer[]> map = new HashMap<ResultSet, Integer[]>();
+
     /**
      * Default Constructor.
      */
-    public ResultSetHelperService() {}
+    public ResultSetHelperService() {
+    }
 
 
     /**
@@ -68,10 +69,12 @@ public class ResultSetHelperService implements ResultSetHelper {
 
     public String[] getColumnTypes(ResultSet rs) throws SQLException {
         List<String> names = new ArrayList<String>();
+        List<Integer> types = new ArrayList<Integer>();
         ResultSetMetaData metadata = rs.getMetaData();
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             String value;
-            switch (metadata.getColumnType(i + 1)) {
+            int type = metadata.getColumnType(i + 1);
+            switch (type) {
                 case Types.BOOLEAN:
                     value = "boolean";
                     break;
@@ -102,9 +105,12 @@ public class ResultSetHelperService implements ResultSetHelper {
                     value = "string";
             }
             names.add(value.intern());
+            types.add(type);
         }
 
         String[] nameArray = new String[names.size()];
+        Integer[] typeArray = new Integer[types.size()];
+        map.put(rs, types.toArray(typeArray));
         return names.toArray(nameArray);
     }
 
@@ -117,7 +123,7 @@ public class ResultSetHelperService implements ResultSetHelper {
      * @throws IOException  - thrown by the result set.
      */
     public String[] getColumnValues(ResultSet rs) throws SQLException, IOException {
-        return this.getColumnValues(rs, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
+        return this.getColumnValues(rs, true, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
     /**
@@ -146,9 +152,10 @@ public class ResultSetHelperService implements ResultSetHelper {
      */
     public String[] getColumnValues(ResultSet rs, boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         List<String> values = new ArrayList<String>();
-        ResultSetMetaData metadata = rs.getMetaData();
-        for (int i = 0; i < metadata.getColumnCount(); i++) {
-            values.add(getColumnValue(rs, metadata.getColumnType(i + 1), i + 1, trim, dateFormatString, timeFormatString));
+        if (!map.containsKey(rs)) getColumnTypes(rs);
+        Integer[] columnTypes = map.get(rs);
+        for (int i = 0; i < columnTypes.length; i++) {
+            values.add(getColumnValue(rs, columnTypes[i], i + 1, trim, dateFormatString, timeFormatString));
         }
         String[] valueArray = new String[values.size()];
         return values.toArray(valueArray);
@@ -167,25 +174,25 @@ public class ResultSetHelperService implements ResultSetHelper {
 
     protected String handleDate(ResultSet rs, int columnIndex, String dateFormatString) throws SQLException {
         java.sql.Date date = rs.getDate(columnIndex);
-        if(dateFormat==null) {
-            dateFormat=new SimpleDateFormat(dateFormatString);
+        if (dateFormat == null) {
+            dateFormat = new SimpleDateFormat(dateFormatString);
         }
-        return date==null? null:dateFormat.format(date);
+        return date == null ? null : dateFormat.format(date);
     }
 
 
-    protected String handleTimestamp(ResultSet rs, int columnIndex, String timestampFormatString)  throws SQLException {
-        java.sql.Timestamp timestamp=rs.getTimestamp(columnIndex);
-        if(timeFormat==null) {
-            timeFormat=new SimpleDateFormat(timestampFormatString);
+    protected String handleTimestamp(ResultSet rs, int columnIndex, String timestampFormatString) throws SQLException {
+        java.sql.Timestamp timestamp = rs.getTimestamp(columnIndex);
+        if (timeFormat == null) {
+            timeFormat = new SimpleDateFormat(timestampFormatString);
         }
         return timestamp == null ? null : timeFormat.format(timestamp);
     }
 
-    protected String handleTimestampTZ(ResultSet rs, int columnIndex, String timestampFormatString)  throws SQLException {
-        java.sql.Timestamp timestamp=rs.getTimestamp(columnIndex);
-        if(timeFormat==null) {
-            timeTZFormat=new SimpleDateFormat(DEFAULT_TIMESTAMPTZ_FORMAT);
+    protected String handleTimestampTZ(ResultSet rs, int columnIndex, String timestampFormatString) throws SQLException {
+        java.sql.Timestamp timestamp = rs.getTimestamp(columnIndex);
+        if (timeFormat == null) {
+            timeTZFormat = new SimpleDateFormat(DEFAULT_TIMESTAMPTZ_FORMAT);
         }
         return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
@@ -202,10 +209,10 @@ public class ResultSetHelperService implements ResultSetHelper {
                 value = Boolean.valueOf(b).toString();
                 break;
             case Types.BLOB:
-                Blob bl=rs.getBlob(colIndex);
+                Blob bl = rs.getBlob(colIndex);
                 if (bl != null) {
-                    int len=(int)bl.length();
-                    byte[] src=bl.getBytes(1,len>BLOB_MAX_SIZE?BLOB_MAX_SIZE:len);
+                    int len = (int) bl.length();
+                    byte[] src = bl.getBytes(1, len > BLOB_MAX_SIZE ? BLOB_MAX_SIZE : len);
                     bl.free();
                     for (int i = 0; i < src.length; i++) {
                         int v = src[i] & 0xFF;
@@ -215,7 +222,7 @@ public class ResultSetHelperService implements ResultSetHelper {
                         }
                         stringBuilder.append(hv);
                     }
-                    value= stringBuilder.toString().toLowerCase();
+                    value = stringBuilder.toString().toLowerCase();
                     stringBuilder.setLength(0);
                 }
                 break;
@@ -223,7 +230,7 @@ public class ResultSetHelperService implements ResultSetHelper {
             case Types.CLOB:
                 Clob c = rs.getClob(colIndex);
                 if (c != null) {
-                    value=c.getSubString(1,(int)c.length());
+                    value = c.getSubString(1, (int) c.length());
                     c.free();
                 }
                 break;
@@ -243,11 +250,10 @@ public class ResultSetHelperService implements ResultSetHelper {
                 value = rs.getString(colIndex);
         }
 
-
         if (value == null) {
             value = "";
         }
 
-        return value;
+        return trim ? value.trim() : value;
     }
 }

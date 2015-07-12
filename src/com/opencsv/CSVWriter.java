@@ -81,7 +81,7 @@ public class CSVWriter implements Closeable, Flushable {
     protected String[] columnTypes;
     protected String[] columnNames;
     protected int INITIAL_BUFFER_SIZE = 4000000;
-    protected int RESULT_FETCH_SIZE=32767;
+    protected int RESULT_FETCH_SIZE = 32767;
 
 
     /**
@@ -97,12 +97,12 @@ public class CSVWriter implements Closeable, Flushable {
         //this(new FileWriter(fileName));
         this(new FileWriter(fileName), separator, quotechar, escapechar, lineEnd);
         this.CSVFileName = fileName;
-        File file=new File(this.CSVFileName);
+        File file = new File(this.CSVFileName);
         tableName = file.getName();
         totalRows = 0;
-        incrRows  = 0 ;
+        incrRows = 0;
         int index = tableName.lastIndexOf(".");
-        if(quotechar=='\'' && escapechar==quotechar) extensionName="sql";
+        if (quotechar == '\'' && escapechar == quotechar) extensionName = "sql";
         if (index > -1) {
             String extName = tableName.substring(index + 1);
             tableName = tableName.substring(0, index);
@@ -111,11 +111,12 @@ public class CSVWriter implements Closeable, Flushable {
                 rawWriter.close();
                 zipType = extName.toLowerCase();
                 //if (zipType.equals("gz")) fileName=tableName+".csv.gz";
-                if(tableName.toLowerCase().endsWith(".csv")) tableName=tableName.substring(0,tableName.length()-4);
+                if (tableName.toLowerCase().endsWith(".csv"))
+                    tableName = tableName.substring(0, tableName.length() - 4);
                 FileOutputStream out = new FileOutputStream(fileName);
                 if (zipType.equals("zip")) {
                     ZipOutputStream zip = new ZipOutputStream(out);
-                    zip.putNextEntry(new ZipEntry(tableName+ "." + extensionName));
+                    zip.putNextEntry(new ZipEntry(tableName + "." + extensionName));
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(out, true);
                 rawWriter = new OutputStreamWriter(out);
@@ -222,9 +223,12 @@ public class CSVWriter implements Closeable, Flushable {
     }
 
     protected void writeLog(int rows) {
-        logWriter.write(String.format("    %s: %d rows extracted, total is %d\n",new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()),rows-incrRows, rows));
+        String msg = String.format("%s: %d rows extracted, total is %d", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()), rows - incrRows, rows);
+        logWriter.write(msg + "\n");
         logWriter.flush();
-        incrRows=rows;
+        System.out.println("    " + msg);
+        System.out.flush();
+        incrRows = rows;
     }
 
     /**
@@ -300,8 +304,7 @@ public class CSVWriter implements Closeable, Flushable {
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
         if (includeColumnNames) {
             writeColumnNames(rs);
-            if (CSVFileName != null)
-                createOracleCtlFileFromHeaders(CSVFileName,columnNames, quotechar);
+            if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, columnNames, quotechar);
         }
         rs.setFetchSize(RESULT_FETCH_SIZE);
         while (rs.next()) {
@@ -323,7 +326,7 @@ public class CSVWriter implements Closeable, Flushable {
         if (nextLine == null) {
             return;
         }
-        if(totalRows==0) writeLog(0);
+        if (totalRows == 0) writeLog(0);
         lineWidth = 0;
 
         for (int i = 0; i < nextLine.length; i++) {
@@ -353,7 +356,7 @@ public class CSVWriter implements Closeable, Flushable {
 
         add(lineEnd);
         ++totalRows;
-        if (buffeWidth >= INITIAL_BUFFER_SIZE-1024) flush();
+        if (buffeWidth >= INITIAL_BUFFER_SIZE - 1024) flush();
     }
 
     /**
@@ -422,8 +425,8 @@ public class CSVWriter implements Closeable, Flushable {
         rawWriter.flush();
         buffeWidth = 0;
         sb.setLength(0);
-        System.gc ();
-        System.runFinalization ();
+        System.gc();
+        System.runFinalization();
         writeLog(totalRows);
     }
 
@@ -447,8 +450,8 @@ public class CSVWriter implements Closeable, Flushable {
     }
 
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
-        File file= new File(CSVFileName);
-        String FileName =file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
+        File file = new File(CSVFileName);
+        String FileName = file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
         String ColName;
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
@@ -460,15 +463,13 @@ public class CSVWriter implements Closeable, Flushable {
         b.append("FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (i > 0) b.append(",\n");
-            ColName='"'+titles[i]+'"';
-            b.append("    ").append(String.format("%-32s",ColName));
-            if (columnTypes[i].equalsIgnoreCase("date"))
-                b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
-            else if (columnTypes[i].equalsIgnoreCase("timestamp"))
-                b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
+            ColName = '"' + titles[i] + '"';
+            b.append("    ").append(String.format("%-32s", ColName));
+            if (columnTypes[i].equalsIgnoreCase("date")) b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
+            else if (columnTypes[i].equalsIgnoreCase("timestamp")) b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
             else if (columnTypes[i].equalsIgnoreCase("timestamptz"))
                 b.append("TIMESTAMP WITH TIME ZONE \"YYYY-MM-DD HH24:MI:SSXFF TZH\" ");
-            b.append(String.format("NULLIF %s=BLANKS",ColName));
+            b.append(String.format("NULLIF %s=BLANKS", ColName));
         }
         b.append("\n)");
         writer.write(b.toString());
