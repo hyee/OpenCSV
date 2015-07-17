@@ -113,7 +113,7 @@ public class CSVWriter implements Closeable, Flushable {
                 //if (zipType.equals("gz")) fileName=tableName+".csv.gz";
                 if (tableName.toLowerCase().endsWith(".csv"))
                     tableName = tableName.substring(0, tableName.length() - 4);
-                FileOutputStream out = new FileOutputStream(fileName);
+                BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(fileName));
                 if (zipType.equals("zip")) {
                     ZipOutputStream zip = new ZipOutputStream(out);
                     zip.putNextEntry(new ZipEntry(tableName + "." + extensionName));
@@ -429,7 +429,10 @@ public class CSVWriter implements Closeable, Flushable {
         }
         rawWriter.flush();
         buffeWidth = 0;
-        sb.setLength(0);
+        sb=null;
+        System.gc();
+        System.runFinalization();
+        sb=new StringBuilder(INITIAL_BUFFER_SIZE);
         writeLog(totalRows);
     }
 
@@ -450,6 +453,11 @@ public class CSVWriter implements Closeable, Flushable {
         pw.close();
         rawWriter.close();
         logWriter.close();
+        sb=null;
+        pw=null;
+        rawWriter=null;
+        System.gc();
+        System.runFinalization();
     }
 
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
