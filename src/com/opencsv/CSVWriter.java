@@ -81,7 +81,7 @@ public class CSVWriter implements Closeable, Flushable {
     protected String[] columnTypes;
     protected String[] columnNames;
     protected int INITIAL_BUFFER_SIZE = 4000000;
-    protected int RESULT_FETCH_SIZE = 32767;
+    protected int RESULT_FETCH_SIZE = 10000;
 
 
     /**
@@ -198,6 +198,10 @@ public class CSVWriter implements Closeable, Flushable {
         sb = new StringBuilder(INITIAL_BUFFER_SIZE);
     }
 
+    public void setFetchSize(int size) {
+        RESULT_FETCH_SIZE = size;
+    }
+
     public void setBufferSize(int bytes) {
         INITIAL_BUFFER_SIZE = bytes;
         sb = new StringBuilder(INITIAL_BUFFER_SIZE);
@@ -310,7 +314,8 @@ public class CSVWriter implements Closeable, Flushable {
         while (rs.next()) {
             writeNext(resultService.getColumnValues(rs, trim));
         }
-        flush();
+        rs.close();
+        close();
         return totalRows;
     }
 
@@ -425,8 +430,6 @@ public class CSVWriter implements Closeable, Flushable {
         rawWriter.flush();
         buffeWidth = 0;
         sb.setLength(0);
-        System.gc();
-        System.runFinalization();
         writeLog(totalRows);
     }
 

@@ -99,7 +99,8 @@ public class SQLWriter extends CSVWriter {
         while (rs.next()) {
             writeNextRow(resultService.getColumnValues(rs, false));
         }
-        flush();
+        rs.close();
+        close();
         return totalRows;
     }
 
@@ -132,8 +133,7 @@ public class SQLWriter extends CSVWriter {
         while ((array = reader.readNext()) != null) {
             writeNextRow(array);
         }
-        flush();
-
+        close();
         return totalRows;
     }
 }
