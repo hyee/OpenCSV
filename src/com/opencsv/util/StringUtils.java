@@ -27,14 +27,12 @@ public class StringUtils {
         return true;
     }
 
-    public static boolean isNotBlank(CharSequence cs)
-    {
+    public static boolean isNotBlank(CharSequence cs) {
         return !isBlank(cs);
     }
 
 
-    public static String join(Object[] array, String separator)
-    {
+    public static String join(Object[] array, String separator) {
         if (array == null) {
             return null;
         }
@@ -46,8 +44,7 @@ public class StringUtils {
             return "";
         }
         StringBuilder buf = new StringBuilder(noOfItems * 16);
-        for (int i = 0; i < noOfItems; i++)
-        {
+        for (int i = 0; i < noOfItems; i++) {
             if (i > 0) {
                 buf.append(separator);
             }

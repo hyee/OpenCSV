@@ -23,7 +23,7 @@ package com.opencsv.bean;
  * <code>setState(String)</code>.  The FEATURE_NAME and STATE columns in the
  * CSV file will be used.  Any additional columns will be ignored.  The filter
  * will eliminate any lines where the STATE value is "production".
- *
+ * <p/>
  * <pre>
  * {@code
  * private class StateFilter implements CsvToBeanFilter {
@@ -59,17 +59,17 @@ package com.opencsv.bean;
  */
 public interface CsvToBeanFilter {
 
-   /**
-    * Determines if a line from the CSV file will be included in the
-    * output of {@link CsvToBean}.  If the CSV file has a header row, it
-    * may be useful for implementations to call
-    * {@link MappingStrategy#getColumnIndex} to identify the correct column
-    * indexes to examine.
-    *
-    * @param line a line of data from the CSV file
-    * @return true if the line is to be included in the output.  Otherwise,
-    * false.
-    */
-   boolean allowLine(String[] line);
+    /**
+     * Determines if a line from the CSV file will be included in the
+     * output of {@link CsvToBean}.  If the CSV file has a header row, it
+     * may be useful for implementations to call
+     * {@link MappingStrategy#getColumnIndex} to identify the correct column
+     * indexes to examine.
+     *
+     * @param line a line of data from the CSV file
+     * @return true if the line is to be included in the output.  Otherwise,
+     * false.
+     */
+    boolean allowLine(String[] line);
 
 }

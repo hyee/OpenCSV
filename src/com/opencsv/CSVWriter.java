@@ -21,17 +21,14 @@ import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.zip.DeflaterOutputStream;
-import java.util.zip.GZIPOutputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
+
 
 /**
  * A very simple CSV writer released under a commercial-friendly license.
  *
  * @author Glen Smith
  */
-public class CSVWriter implements Closeable, Flushable {
+public class CSVWriter implements Closeable {
 
     public static final int INITIAL_STRING_SIZE = 128;
     /**
@@ -59,25 +56,19 @@ public class CSVWriter implements Closeable, Flushable {
      * Default line terminator uses platform encoding.
      */
     public static final String DEFAULT_LINE_END = "\n";
-    protected Writer rawWriter;
-    protected PrintWriter pw;
+    public static int INITIAL_BUFFER_SIZE = 4000000;
     protected char separator;
     protected char quotechar;
     protected char escapechar;
-    protected int buffeWidth;
     protected int lineWidth;
     protected int totalRows;
     protected int incrRows;
     protected String lineEnd;
-    protected String tableName;
     protected PrintWriter logWriter;
     protected String CSVFileName;
-    protected StringBuilder sb;
-    protected DeflaterOutputStream zipStream;
-    protected String zipType = null;
-    protected String extensionName = "csv";
     protected ResultSetHelperService resultService;
-    protected int INITIAL_BUFFER_SIZE = 4000000;
+
+    protected FileBuffer buffer;
 
 
     /**
@@ -90,36 +81,12 @@ public class CSVWriter implements Closeable, Flushable {
     }
 
     public CSVWriter(String fileName, char separator, char quotechar, char escapechar, String lineEnd) throws IOException {
-        //this(new FileWriter(fileName));
         this(new FileWriter(fileName), separator, quotechar, escapechar, lineEnd);
         this.CSVFileName = fileName;
-        File file = new File(this.CSVFileName);
-        tableName = file.getName();
-        totalRows = 0;
-        incrRows = 0;
-        int index = tableName.lastIndexOf(".");
+        String extensionName = "csv";
         if (quotechar == '\'' && escapechar == quotechar) extensionName = "sql";
-        if (index > -1) {
-            String extName = tableName.substring(index + 1);
-            tableName = tableName.substring(0, index);
-            if (extName.equalsIgnoreCase("zip") || extName.equalsIgnoreCase("gz")) {
-                pw.close();
-                rawWriter.close();
-                zipType = extName.toLowerCase();
-                //if (zipType.equals("gz")) fileName=tableName+".csv.gz";
-                if (tableName.toLowerCase().endsWith(".csv"))
-                    tableName = tableName.substring(0, tableName.length() - 4);
-                BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(fileName));
-                if (zipType.equals("zip")) {
-                    ZipOutputStream zip = new ZipOutputStream(out);
-                    zip.putNextEntry(new ZipEntry(tableName + "." + extensionName));
-                    zipStream = zip;
-                } else zipStream = new GZIPOutputStream(out, true);
-                rawWriter = new OutputStreamWriter(out);
-                pw = new PrintWriter(rawWriter);
-            }
-        }
-        logWriter = new PrintWriter(file.getParentFile().getAbsolutePath() + File.separator + tableName + ".log");
+        buffer = new FileBuffer(INITIAL_BUFFER_SIZE, fileName, extensionName);
+        logWriter = new PrintWriter(buffer.file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".log");
         //logWriter = new PrintWriter(System.err);
     }
 
@@ -185,42 +152,36 @@ public class CSVWriter implements Closeable, Flushable {
      * @param lineEnd    the line feed terminator to use
      */
     public CSVWriter(Writer writer, char separator, char quotechar, char escapechar, String lineEnd) {
-        this.rawWriter = writer;
-        this.pw = new PrintWriter(writer);
         this.separator = separator;
         this.quotechar = quotechar;
         this.escapechar = escapechar;
         this.lineEnd = lineEnd;
-        sb = new StringBuilder(INITIAL_BUFFER_SIZE);
     }
 
 
     public void setBufferSize(int bytes) {
         INITIAL_BUFFER_SIZE = bytes;
-        sb = new StringBuilder(INITIAL_BUFFER_SIZE);
     }
 
-    protected CSVWriter add(char str) {
-        sb.append(str);
-        ++buffeWidth;
+    protected CSVWriter add(char str) throws IOException {
+        buffer.write(str);
         ++lineWidth;
         return this;
     }
 
-    protected CSVWriter add(String str) {
+    protected CSVWriter add(String str) throws IOException {
+        buffer.write(str.getBytes());
         int len = str.length();
-        sb.append(str);
-        buffeWidth += len;
         lineWidth += len;
         return this;
     }
 
-    protected CSVWriter add(StringBuilder sbf) {
+    protected CSVWriter add(StringBuilder sbf) throws IOException {
         return add(sbf.toString());
     }
 
     protected void writeLog(int rows) {
-        String msg = String.format("%s: %d rows extracted, total is %d", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()), rows - incrRows, rows);
+        String msg = String.format("%s: %d rows extracted, total: %d rows, %.2f MB, %.3f secs on fetching.", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()), rows - incrRows, rows, (float) buffer.position / 1024 / 1024, resultService == null ? 0f : (float) resultService.cost / 1e9);
         logWriter.write(msg + "\n");
         logWriter.flush();
         System.out.println("    " + msg);
@@ -309,6 +270,11 @@ public class CSVWriter implements Closeable, Flushable {
         return totalRows;
     }
 
+    public void flush(boolean force) throws IOException {
+        if (buffer.currentBytes == 0) return;
+        if (buffer.flush(force)) writeLog(totalRows);
+    }
+
     /**
      * Writes the next line to the file.
      *
@@ -323,23 +289,18 @@ public class CSVWriter implements Closeable, Flushable {
         }
         if (totalRows == 0) writeLog(0);
         lineWidth = 0;
-
         for (int i = 0; i < nextLine.length; i++) {
-
             if (i != 0) {
                 add(separator);
             }
-
             String nextElement = nextLine[i];
-
             Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
-
             if ((applyQuotesToAll || stringContainsSpecialCharacters) && quotechar != NO_QUOTE_CHARACTER) {
                 add(quotechar);
             }
 
             if (stringContainsSpecialCharacters) {
-                add(processLine(nextElement));
+                processLine(nextElement);
             } else {
                 add(nextElement);
             }
@@ -348,10 +309,9 @@ public class CSVWriter implements Closeable, Flushable {
                 add(quotechar);
             }
         }
-
         add(lineEnd);
         ++totalRows;
-        if (buffeWidth >= INITIAL_BUFFER_SIZE - 1024) flush();
+        flush(false);
     }
 
     /**
@@ -380,51 +340,24 @@ public class CSVWriter implements Closeable, Flushable {
      * @param nextElement - element to process.
      * @return a StringBuilder with the elements data.
      */
-    protected StringBuilder processLine(String nextElement) {
-        StringBuilder sb = new StringBuilder(INITIAL_STRING_SIZE);
+    protected void processLine(String nextElement) throws IOException {
         for (int j = 0; j < nextElement.length(); j++) {
             char nextChar = nextElement.charAt(j);
-            processCharacter(sb, nextChar);
-        }
-
-        return sb;
-    }
-
-    /**
-     * Appends the character to the StringBuilder adding the escape character if needed.
-     *
-     * @param sb       - StringBuffer holding the processed character.
-     * @param nextChar - character to process
-     */
-    private void processCharacter(StringBuilder sb, char nextChar) {
-        if (escapechar != NO_ESCAPE_CHARACTER && (nextChar == quotechar || nextChar == escapechar)) {
-            sb.append(escapechar).append(nextChar);
-        } else {
-            sb.append(nextChar);
+            if (escapechar != NO_ESCAPE_CHARACTER && (nextChar == quotechar || nextChar == escapechar)) {
+                add(escapechar).add(nextChar);
+            } else {
+                add(nextChar);
+            }
         }
     }
+
 
     /**
      * Flush underlying stream to writer.
      *
      * @throws IOException if bad things happen
      */
-    public void flush() throws IOException {
-        if (buffeWidth == 0) return;
-        if (zipStream != null) {
-            zipStream.write(sb.toString().getBytes());
-            zipStream.flush();
-        } else {
-            rawWriter.write(sb.toString());
-        }
-        rawWriter.flush();
-        buffeWidth = 0;
-        sb = null;
-        System.gc();
-        System.runFinalization();
-        sb = new StringBuilder(INITIAL_BUFFER_SIZE);
-        writeLog(totalRows);
-    }
+
 
     /**
      * Close the underlying stream writer flushing any buffered content.
@@ -432,20 +365,9 @@ public class CSVWriter implements Closeable, Flushable {
      * @throws IOException if bad things happen
      */
     public void close() throws IOException {
-        flush();
-        if (zipStream != null) {
-            zipStream.finish();
-            zipStream.close();
-            zipStream = null;
-        }
-        pw.flush();
-        rawWriter.flush();
-        pw.close();
-        rawWriter.close();
+        flush(true);
         logWriter.close();
-        sb = null;
-        pw = null;
-        rawWriter = null;
+        buffer.close();
         resultService = null;
         System.gc();
         System.runFinalization();
@@ -453,15 +375,15 @@ public class CSVWriter implements Closeable, Flushable {
 
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
         File file = new File(CSVFileName);
-        String FileName = file.getParentFile().getAbsolutePath() + File.separator + tableName + ".ctl";
+        String FileName = file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".ctl";
         String ColName;
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
-        b.append("INFILE      ").append(tableName).append(".csv\n");
-        b.append("BADFILE     ").append(tableName).append(".bad").append("\n");
-        b.append("DISCARDFILE ").append(tableName).append(".dsc").append("\n");
-        b.append("APPEND INTO TABLE ").append(tableName).append("\n");
+        b.append("INFILE      ").append(buffer.fileName).append(".csv\n");
+        b.append("BADFILE     ").append(buffer.fileName).append(".bad").append("\n");
+        b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc").append("\n");
+        b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
         b.append("FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (i > 0) b.append(",\n");
@@ -487,9 +409,6 @@ public class CSVWriter implements Closeable, Flushable {
      * either on the underlying output stream or during a format
      * conversion.
      */
-    public boolean checkError() {
-        return pw.checkError();
-    }
 
     /**
      * Sets the result service.
@@ -503,11 +422,5 @@ public class CSVWriter implements Closeable, Flushable {
     /**
      * flushes the writer without throwing any exceptions.
      */
-    public void flushQuietly() {
-        try {
-            flush();
-        } catch (IOException e) {
-            // catch exception and ignore.
-        }
-    }
+
 }

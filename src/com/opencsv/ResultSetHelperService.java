@@ -34,16 +34,17 @@ public class ResultSetHelperService {
     public String[] columnNames;
     public String[] columnTypes;
     public String[] rowValue;
+    public long cost =0;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
-    private StringBuilder stringBuilder = new StringBuilder(32767);
     private ResultSet rs;
 
     /**
      * Default Constructor.
      */
     public ResultSetHelperService(ResultSet res, int fetchSize) throws SQLException {
+        long sec= System.nanoTime();
         rs = res;
         rs.setFetchSize(fetchSize);
         rs.setFetchDirection(ResultSet.FETCH_FORWARD);
@@ -101,6 +102,7 @@ public class ResultSetHelperService {
             columnTypes[i] = value.intern();
             columnNames[i] = metadata.getColumnName(i + 1).intern();
         }
+        cost += System.nanoTime()-sec;
     }
 
     public ResultSetHelperService(ResultSet res) throws SQLException {
@@ -142,6 +144,7 @@ public class ResultSetHelperService {
      * @throws IOException  - thrown by the result set.
      */
     public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
+        long sec=System.nanoTime();
         if (!rs.next()) {
             rs.close();
             return null;
@@ -149,6 +152,7 @@ public class ResultSetHelperService {
         for (int i = 0; i < columnCount; i++) {
             getColumnValue(columnTypes[i], i + 1, trim, dateFormatString, timeFormatString);
         }
+        cost += System.nanoTime()-sec;
         return rowValue;
     }
 
@@ -191,57 +195,56 @@ public class ResultSetHelperService {
     }
 
     private void getColumnValue(String colType, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
-        rowValue[colIndex-1] = "";
+        rowValue[colIndex - 1] = "";
         switch (colType) {
             case "object":
-                rowValue[colIndex-1] = handleObject(rs.getObject(colIndex));
+                rowValue[colIndex - 1] = handleObject(rs.getObject(colIndex));
                 break;
             case "boolean":
                 boolean b = rs.getBoolean(colIndex);
-                rowValue[colIndex-1] = Boolean.valueOf(b).toString();
+                rowValue[colIndex - 1] = Boolean.valueOf(b).toString();
                 break;
             case "blob":
                 Blob bl = rs.getBlob(colIndex);
                 if (bl != null) {
                     byte[] src = bl.getBytes(1, (int) bl.length());
                     bl.free();
+                    StringBuilder sb=new StringBuilder(src.length*2);
                     for (int i = 0; i < src.length; i++) {
                         int v = src[i] & 0xFF;
                         String hv = Integer.toHexString(v);
                         if (hv.length() < 2) {
-                            stringBuilder.append(0);
+                            sb.append(0);
                         }
-                        stringBuilder.append(hv);
+                        sb.append(hv);
                     }
-                    rowValue[colIndex-1] = stringBuilder.toString().toLowerCase();
-                    stringBuilder.setLength(0);
+                    rowValue[colIndex - 1] = sb.toString().toUpperCase();
                 }
                 break;
             case "clob":
                 Clob c = rs.getClob(colIndex);
                 if (c != null) {
-                    rowValue[colIndex-1] = c.getSubString(1, (int) c.length());
+                    rowValue[colIndex - 1] = c.getSubString(1, (int) c.length());
                     c.free();
                 }
                 break;
             case "date":
             case "time":
-                rowValue[colIndex-1] = handleDate(colIndex, dateFormatString);
+                rowValue[colIndex - 1] = handleDate(colIndex, dateFormatString);
                 break;
             case "timestamp":
-                rowValue[colIndex-1] = handleTimestamp(colIndex, timestampFormatString);
+                rowValue[colIndex - 1] = handleTimestamp(colIndex, timestampFormatString);
                 break;
             case "timestamptz":
-                rowValue[colIndex-1] = handleTimestampTZ(colIndex, timestampFormatString);
+                rowValue[colIndex - 1] = handleTimestampTZ(colIndex, timestampFormatString);
                 break;
             default:
-                rowValue[colIndex-1] = rs.getString(colIndex);
+                rowValue[colIndex - 1] = rs.getString(colIndex);
         }
 
-        if (rowValue[colIndex-1] == null) {
-            rowValue[colIndex-1] = "";
+        if (rowValue[colIndex - 1] == null) {
+            rowValue[colIndex - 1] = "";
         }
-
-        if (trim) rowValue[colIndex-1] = rowValue[colIndex-1].trim();
+        if (trim) rowValue[colIndex - 1] = rowValue[colIndex - 1].trim();
     }
 }

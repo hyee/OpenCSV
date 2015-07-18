@@ -12,19 +12,16 @@ public class SQLWriter extends CSVWriter {
 
     static final int SQL_BUFFER_SIZE = 8000000;
     protected String columns;
-    protected int initSize;
     private int maxLineWidth;
     private String fileHeader = "";
 
     public SQLWriter(Writer writer) {
         super(writer, ',', '\'', '\'', "\n");
-        extensionName = "sql";
         setBufferSize(SQL_BUFFER_SIZE);
     }
 
     public SQLWriter(String fileName) throws IOException {
         super(fileName, ',', '\'', '\'', "\n");
-        extensionName = "sql";
         setBufferSize(SQL_BUFFER_SIZE);
     }
 
@@ -45,36 +42,27 @@ public class SQLWriter extends CSVWriter {
                 lineWidth = 4;
             }
             String nextElement = nextLine[i];
-            int quotePos = -1;
-            Boolean isQuote = resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals("");
+            Boolean isString = resultService!=null &&resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals("");
 
-            if (isQuote) {
+            if (isString) {
                 add(quotechar);
-                quotePos = nextElement.lastIndexOf(quotechar);
-            }
-            if (quotePos != -1) {
-                int orgSize = buffeWidth;
-                add(nextElement);
-                while (quotePos != -1) {
-                    sb.insert(orgSize + quotePos, quotechar);
-                    ++buffeWidth;
-                    quotePos = nextElement.lastIndexOf(quotechar, quotePos - 1);
-                }
+                if(nextElement.lastIndexOf(quotechar)>=0)
+                    processLine(nextElement);
+                else
+                    add(nextElement);
+                add(quotechar);
             } else {
                 add(nextElement.equals("") ? "null" : nextElement);
             }
-            if (isQuote) add(quotechar);
         }
         add(");").add(lineEnd);
         ++totalRows;
-        if (buffeWidth >= INITIAL_BUFFER_SIZE - maxLineWidth) flush();
+        flush(false);
     }
 
-    private void init(String[] titles, String headerEncloser, int maxLineWidth) {
+    private void init(String[] titles, String headerEncloser, int maxLineWidth) throws IOException {
         columns = headerEncloser + StringUtils.join(titles, headerEncloser + "," + headerEncloser) + headerEncloser;
-        columns = "INSERT INTO " + tableName + "(" + columns + ")" + lineEnd + "  VALUES(";
-        sb = new StringBuilder(initSize);
-        buffeWidth = 0;
+        columns = "INSERT INTO " + buffer.fileName + "(" + columns + ")" + lineEnd + "  VALUES(";
         lineWidth = 0;
         this.maxLineWidth = maxLineWidth;
         add(fileHeader == null ? "" : fileHeader).add(lineEnd);
@@ -82,6 +70,10 @@ public class SQLWriter extends CSVWriter {
 
     public void setFileHead(String header) {
         fileHeader = header;
+    }
+
+    public void setCSVDataTypes(ResultSet rs) throws SQLException {
+        resultService=new ResultSetHelperService(rs);
     }
 
     public int writeAll2SQL(ResultSet rs) throws SQLException, IOException {
@@ -108,11 +100,17 @@ public class SQLWriter extends CSVWriter {
         return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
     }
 
+    public int writeAll2SQL(String CSVFileSource,ResultSet rs) throws IOException,SQLException {
+        this.CSVFileName = CSVFileSource;
+        if(rs!=null&&!rs.isClosed()) setCSVDataTypes(rs);
+        return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
+    }
+
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
         String[] array = reader.readNext();
         String types[] = new String[array.length];
         for (int i = 0; i < array.length; i++) types[i] = "string";
-        if (resultService.columnNames != null) {
+        if (resultService!=null&&resultService.columnNames != null) {
             for (int i = 0; i < resultService.columnNames.length; i++)
                 for (int j = 0; j < array.length; j++)
                     if (resultService.columnNames[i].equalsIgnoreCase(array[j].trim())) {
