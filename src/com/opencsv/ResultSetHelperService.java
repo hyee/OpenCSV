@@ -18,62 +18,48 @@ package com.opencsv;
 import java.io.IOException;
 import java.sql.*;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 
 /**
  * helper class for processing JDBC ResultSet objects.
  */
-public class ResultSetHelperService implements ResultSetHelper {
-    public static final int CLOBBUFFERSIZE = 2048;
+public class ResultSetHelperService {
 
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
 
-    static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    static final String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
-    static final String DEFAULT_TIMESTAMPTZ_FORMAT = "yyyy-MM-dd HH:mm:ss.S X";
+    public static int RESULT_FETCH_SIZE = 10000;
+    static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
+    public int columnCount;
+    public String[] columnNames;
+    public String[] columnTypes;
+    public String[] rowValue;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
     private StringBuilder stringBuilder = new StringBuilder(32767);
-    private HashMap<ResultSet, Object[]> map = new HashMap<ResultSet, Object[]>();
+    private ResultSet rs;
 
     /**
      * Default Constructor.
      */
-    public ResultSetHelperService() {
-    }
-
-
-    /**
-     * Returns the column names from the result set.
-     *
-     * @param rs - ResultSet
-     * @return - a string array containing the column names.
-     * @throws SQLException - thrown by the result set.
-     */
-    public String[] getColumnNames(ResultSet rs) throws SQLException {
-        List<String> names = new ArrayList<String>();
+    public ResultSetHelperService(ResultSet res, int fetchSize) throws SQLException {
+        rs = res;
+        rs.setFetchSize(fetchSize);
+        rs.setFetchDirection(ResultSet.FETCH_FORWARD);
         ResultSetMetaData metadata = rs.getMetaData();
-
+        columnCount = metadata.getColumnCount();
+        rowValue = new String[columnCount];
+        columnNames = new String[columnCount];
+        columnTypes = new String[columnCount];
         for (int i = 0; i < metadata.getColumnCount(); i++) {
-            names.add(metadata.getColumnName(i + 1));
-        }
-
-        String[] nameArray = new String[names.size()];
-        return names.toArray(nameArray);
-    }
-
-    public String[] getColumnTypes(ResultSet rs) throws SQLException {
-        List<String> names = new ArrayList<String>();
-        List<Integer> types = new ArrayList<Integer>();
-        ResultSetMetaData metadata = rs.getMetaData();
-        for (int i = 0; i < metadata.getColumnCount(); i++) {
-            String value;
             int type = metadata.getColumnType(i + 1);
+            String value;
             switch (type) {
+                case Types.BIT:
+                case Types.JAVA_OBJECT:
+                    value = "object";
+                    break;
                 case Types.BOOLEAN:
                     value = "boolean";
                     break;
@@ -89,6 +75,8 @@ public class ResultSetHelperService implements ResultSetHelper {
                     value = "number";
                     break;
                 case Types.TIME:
+                    value = "date";
+                    break;
                 case Types.DATE:
                     value = "date";
                     break;
@@ -100,47 +88,52 @@ public class ResultSetHelperService implements ResultSetHelper {
                 case -102:
                     value = "timestamptz";
                     break;
+                case Types.BLOB:
+                    value = "blob";
+                    break;
+                case Types.NCLOB:
+                case Types.CLOB:
+                    value = "clob";
+                    break;
                 default:
                     value = "string";
             }
-            names.add(value.intern());
-            types.add(type);
+            columnTypes[i] = value.intern();
+            columnNames[i] = metadata.getColumnName(i + 1).intern();
         }
-        String[] nameArray = new String[names.size()];
-        Integer[] typeArray = new Integer[types.size()];
-        map.put(rs, new Object[]{types.toArray(typeArray), new String[names.size()]});
-        return names.toArray(nameArray);
     }
+
+    public ResultSetHelperService(ResultSet res) throws SQLException {
+        this(res, RESULT_FETCH_SIZE);
+    }
+
 
     /**
      * Get all the column values from the result set.
      *
-     * @param rs - the ResultSet containing the values.
      * @return - String array containing all the column values.
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues(ResultSet rs) throws SQLException, IOException {
-        return this.getColumnValues(rs, true, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
+    public String[] getColumnValues() throws SQLException, IOException {
+        return this.getColumnValues(true, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
     /**
      * Get all the column values from the result set.
      *
-     * @param rs   - the ResultSet containing the values.
      * @param trim - values should have white spaces trimmed.
      * @return - String array containing all the column values.
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues(ResultSet rs, boolean trim) throws SQLException, IOException {
-        return this.getColumnValues(rs, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
+    public String[] getColumnValues(boolean trim) throws SQLException, IOException {
+        return this.getColumnValues(trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
     /**
      * Get all the column values from the result set.
      *
-     * @param rs               - the ResultSet containing the values.
      * @param trim             - values should have white spaces trimmed.
      * @param dateFormatString - format String for dates.
      * @param timeFormatString - format String for timestamps.
@@ -148,16 +141,15 @@ public class ResultSetHelperService implements ResultSetHelper {
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues(ResultSet rs, boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
-        List<String> values = new ArrayList<String>();
-        if (!map.containsKey(rs)) getColumnTypes(rs);
-        Object[] obj = map.get(rs);
-        Integer[] columnTypes = (Integer[]) obj[0];
-        String[] ColumnValues = (String[]) obj[1];
-        for (int i = 0; i < columnTypes.length; i++) {
-            ColumnValues[i] = getColumnValue(rs, columnTypes[i], i + 1, trim, dateFormatString, timeFormatString);
+    public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
+        if (!rs.next()) {
+            rs.close();
+            return null;
         }
-        return ColumnValues;
+        for (int i = 0; i < columnCount; i++) {
+            getColumnValue(columnTypes[i], i + 1, trim, dateFormatString, timeFormatString);
+        }
+        return rowValue;
     }
 
     /**
@@ -171,46 +163,47 @@ public class ResultSetHelperService implements ResultSetHelper {
     }
 
 
-    protected String handleDate(ResultSet rs, int columnIndex, String dateFormatString) throws SQLException {
+    protected String handleDate(int columnIndex, String dateFormatString) throws SQLException {
         java.sql.Date date = rs.getDate(columnIndex);
         if (dateFormat == null) {
+            DEFAULT_DATE_FORMAT = dateFormatString;
             dateFormat = new SimpleDateFormat(dateFormatString);
         }
         return date == null ? null : dateFormat.format(date);
     }
 
 
-    protected String handleTimestamp(ResultSet rs, int columnIndex, String timestampFormatString) throws SQLException {
+    protected String handleTimestamp(int columnIndex, String timestampFormatString) throws SQLException {
         java.sql.Timestamp timestamp = rs.getTimestamp(columnIndex);
         if (timeFormat == null) {
+            DEFAULT_TIMESTAMP_FORMAT = timestampFormatString;
             timeFormat = new SimpleDateFormat(timestampFormatString);
         }
         return timestamp == null ? null : timeFormat.format(timestamp);
     }
 
-    protected String handleTimestampTZ(ResultSet rs, int columnIndex, String timestampFormatString) throws SQLException {
+    protected String handleTimestampTZ(int columnIndex, String timestampFormatString) throws SQLException {
         java.sql.Timestamp timestamp = rs.getTimestamp(columnIndex);
         if (timeFormat == null) {
-            timeTZFormat = new SimpleDateFormat(DEFAULT_TIMESTAMPTZ_FORMAT);
+            timeTZFormat = new SimpleDateFormat(timestampFormatString + " S");
         }
         return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
 
-    private String getColumnValue(ResultSet rs, int colType, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
-        String value = "";
+    private void getColumnValue(String colType, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
+        rowValue[colIndex-1] = "";
         switch (colType) {
-            case Types.BIT:
-            case Types.JAVA_OBJECT:
-                value = handleObject(rs.getObject(colIndex));
+            case "object":
+                rowValue[colIndex-1] = handleObject(rs.getObject(colIndex));
                 break;
-            case Types.BOOLEAN:
+            case "boolean":
                 boolean b = rs.getBoolean(colIndex);
-                value = Boolean.valueOf(b).toString();
+                rowValue[colIndex-1] = Boolean.valueOf(b).toString();
                 break;
-            case Types.BLOB:
+            case "blob":
                 Blob bl = rs.getBlob(colIndex);
                 if (bl != null) {
-                    byte[] src = bl.getBytes(1, (int)bl.length());
+                    byte[] src = bl.getBytes(1, (int) bl.length());
                     bl.free();
                     for (int i = 0; i < src.length; i++) {
                         int v = src[i] & 0xFF;
@@ -220,38 +213,35 @@ public class ResultSetHelperService implements ResultSetHelper {
                         }
                         stringBuilder.append(hv);
                     }
-                    value = stringBuilder.toString().toLowerCase();
+                    rowValue[colIndex-1] = stringBuilder.toString().toLowerCase();
                     stringBuilder.setLength(0);
                 }
                 break;
-            case Types.NCLOB:
-            case Types.CLOB:
+            case "clob":
                 Clob c = rs.getClob(colIndex);
                 if (c != null) {
-                    value = c.getSubString(1, (int) c.length());
+                    rowValue[colIndex-1] = c.getSubString(1, (int) c.length());
                     c.free();
                 }
                 break;
-            case Types.DATE:
-            case Types.TIME:
-                value = handleDate(rs, colIndex, dateFormatString);
+            case "date":
+            case "time":
+                rowValue[colIndex-1] = handleDate(colIndex, dateFormatString);
                 break;
-            case Types.TIMESTAMP:
-            case -100:
-                value = handleTimestamp(rs, colIndex, timestampFormatString);
+            case "timestamp":
+                rowValue[colIndex-1] = handleTimestamp(colIndex, timestampFormatString);
                 break;
-            case -101:
-            case -102:
-                value = handleTimestampTZ(rs, colIndex, timestampFormatString);
+            case "timestamptz":
+                rowValue[colIndex-1] = handleTimestampTZ(colIndex, timestampFormatString);
                 break;
             default:
-                value = rs.getString(colIndex);
+                rowValue[colIndex-1] = rs.getString(colIndex);
         }
 
-        if (value == null) {
-            value = "";
+        if (rowValue[colIndex-1] == null) {
+            rowValue[colIndex-1] = "";
         }
 
-        return trim ? value.trim() : value;
+        if (trim) rowValue[colIndex-1] = rowValue[colIndex-1].trim();
     }
 }

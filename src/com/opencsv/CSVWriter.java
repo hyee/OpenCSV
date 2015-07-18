@@ -17,7 +17,6 @@ package com.opencsv;
  */
 
 import java.io.*;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -77,11 +76,8 @@ public class CSVWriter implements Closeable, Flushable {
     protected DeflaterOutputStream zipStream;
     protected String zipType = null;
     protected String extensionName = "csv";
-    protected ResultSetHelper resultService = new ResultSetHelperService();
-    protected String[] columnTypes;
-    protected String[] columnNames;
+    protected ResultSetHelperService resultService;
     protected int INITIAL_BUFFER_SIZE = 4000000;
-    protected int RESULT_FETCH_SIZE = 10000;
 
 
     /**
@@ -198,9 +194,6 @@ public class CSVWriter implements Closeable, Flushable {
         sb = new StringBuilder(INITIAL_BUFFER_SIZE);
     }
 
-    public void setFetchSize(int size) {
-        RESULT_FETCH_SIZE = size;
-    }
 
     public void setBufferSize(int bytes) {
         INITIAL_BUFFER_SIZE = bytes;
@@ -249,7 +242,7 @@ public class CSVWriter implements Closeable, Flushable {
         for (String[] line : allLines) {
             writeNext(line, applyQuotesToAll);
         }
-        flush();
+        close();
         return totalRows;
     }
 
@@ -264,20 +257,17 @@ public class CSVWriter implements Closeable, Flushable {
         for (String[] line : allLines) {
             writeNext(line);
         }
-        flush();
+        close();
         return totalRows;
     }
 
     /**
      * Writes the column names.
      *
-     * @param rs - ResultSet containing column names.
      * @throws SQLException - thrown by ResultSet::getColumnNames
      */
-    protected void writeColumnNames(ResultSet rs) throws SQLException, IOException {
-        columnNames = resultService.getColumnNames(rs);
-        columnTypes = resultService.getColumnTypes(rs);
-        writeNext(columnNames);
+    protected void writeColumnNames() throws SQLException, IOException {
+        writeNext(resultService.columnNames);
     }
 
     /**
@@ -306,15 +296,15 @@ public class CSVWriter implements Closeable, Flushable {
      * @throws java.sql.SQLException thrown by getColumnValue
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
+        resultService = new ResultSetHelperService(rs);
         if (includeColumnNames) {
-            writeColumnNames(rs);
-            if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, columnNames, quotechar);
+            writeColumnNames();
+            if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, quotechar);
         }
-        rs.setFetchSize(RESULT_FETCH_SIZE);
-        while (rs.next()) {
-            writeNext(resultService.getColumnValues(rs, trim));
+        String[] values;
+        while ((values = resultService.getColumnValues(trim)) != null) {
+            writeNext(values);
         }
-        rs.close();
         close();
         return totalRows;
     }
@@ -429,10 +419,10 @@ public class CSVWriter implements Closeable, Flushable {
         }
         rawWriter.flush();
         buffeWidth = 0;
-        sb=null;
+        sb = null;
         System.gc();
         System.runFinalization();
-        sb=new StringBuilder(INITIAL_BUFFER_SIZE);
+        sb = new StringBuilder(INITIAL_BUFFER_SIZE);
         writeLog(totalRows);
     }
 
@@ -453,9 +443,10 @@ public class CSVWriter implements Closeable, Flushable {
         pw.close();
         rawWriter.close();
         logWriter.close();
-        sb=null;
-        pw=null;
-        rawWriter=null;
+        sb = null;
+        pw = null;
+        rawWriter = null;
+        resultService = null;
         System.gc();
         System.runFinalization();
     }
@@ -476,9 +467,10 @@ public class CSVWriter implements Closeable, Flushable {
             if (i > 0) b.append(",\n");
             ColName = '"' + titles[i] + '"';
             b.append("    ").append(String.format("%-32s", ColName));
-            if (columnTypes[i].equalsIgnoreCase("date")) b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
-            else if (columnTypes[i].equalsIgnoreCase("timestamp")) b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
-            else if (columnTypes[i].equalsIgnoreCase("timestamptz"))
+            if (resultService.columnTypes[i].equalsIgnoreCase("date")) b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
+            else if (resultService.columnTypes[i].equalsIgnoreCase("timestamp"))
+                b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
+            else if (resultService.columnTypes[i].equalsIgnoreCase("timestamptz"))
                 b.append("TIMESTAMP WITH TIME ZONE \"YYYY-MM-DD HH24:MI:SSXFF TZH\" ");
             b.append(String.format("NULLIF %s=BLANKS", ColName));
         }
@@ -504,7 +496,7 @@ public class CSVWriter implements Closeable, Flushable {
      *
      * @param resultService - the ResultSetHelper
      */
-    public void setResultService(ResultSetHelper resultService) {
+    public void setResultService(ResultSetHelperService resultService) {
         this.resultService = resultService;
     }
 
