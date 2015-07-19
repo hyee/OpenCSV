@@ -33,6 +33,7 @@ public class ResultSetHelperService {
     public int columnCount;
     public String[] columnNames;
     public String[] columnTypes;
+    public int[]    columnTypesI;
     public String[] rowValue;
     public long cost =0;
     private SimpleDateFormat dateFormat;
@@ -53,6 +54,7 @@ public class ResultSetHelperService {
         rowValue = new String[columnCount];
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
+        columnTypesI= new int[columnCount];
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             int type = metadata.getColumnType(i + 1);
             String value;
@@ -99,6 +101,7 @@ public class ResultSetHelperService {
                 default:
                     value = "string";
             }
+            columnTypesI[i]= type;
             columnTypes[i] = value.intern();
             columnNames[i] = metadata.getColumnName(i + 1).intern();
         }

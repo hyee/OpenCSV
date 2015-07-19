@@ -66,6 +66,7 @@ public class FileBuffer {
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(buff, true);
             }
+            if(charset!=null) this.charset=Charset.forName(charset);
 
         } catch (IOException e) {
             close();
