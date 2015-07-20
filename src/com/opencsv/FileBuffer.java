@@ -1,5 +1,7 @@
 package com.opencsv;
 
+import sun.nio.ch.DirectBuffer;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -134,6 +136,8 @@ public class FileBuffer {
                 zipStream.finish();
                 zipStream.close();
             }
+            if(buffer!=null) ((DirectBuffer)buffer).cleaner().clean();
+
             if (channel != null && channel.isOpen()) channel.close();
             if (out != null) out.close();
             buffer = null;

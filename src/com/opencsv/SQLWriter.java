@@ -10,19 +10,18 @@ import java.sql.SQLException;
 
 public class SQLWriter extends CSVWriter {
 
-    static final int SQL_BUFFER_SIZE = 8000000;
     protected String columns;
     private int maxLineWidth;
     private String fileHeader = "";
 
     public SQLWriter(Writer writer) {
         super(writer, ',', '\'', '\'', "\n");
-        setBufferSize(SQL_BUFFER_SIZE);
+        setBufferSize(INITIAL_BUFFER_SIZE);
     }
 
     public SQLWriter(String fileName) throws IOException {
         super(fileName, ',', '\'', '\'', "\n");
-        setBufferSize(SQL_BUFFER_SIZE);
+        setBufferSize(INITIAL_BUFFER_SIZE);
     }
 
 

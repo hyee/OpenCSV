@@ -56,7 +56,7 @@ public class CSVWriter implements Closeable {
      * Default line terminator uses platform encoding.
      */
     public static final String DEFAULT_LINE_END = "\n";
-    public static int INITIAL_BUFFER_SIZE = 4000000;
+    public static int INITIAL_BUFFER_SIZE = 8000000;
     protected char separator;
     protected char quotechar;
     protected char escapechar;

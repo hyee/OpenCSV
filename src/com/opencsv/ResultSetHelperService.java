@@ -27,7 +27,7 @@ public class ResultSetHelperService {
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
 
-    public static int RESULT_FETCH_SIZE = 10000;
+    public static int RESULT_FETCH_SIZE = 30000;
     static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
     public int columnCount;
