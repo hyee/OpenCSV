@@ -16,7 +16,7 @@ import java.util.zip.ZipOutputStream;
 /**
  * Created by 1506428 on 7/18/2015.
  */
-public class FileBuffer {
+public class FileBuffer implements Closeable {
     public static int BUFFER_RESERVED_SIZE = 2097152;
     public String fileName;
     public String extName;
@@ -135,13 +135,14 @@ public class FileBuffer {
             if (zipStream != null) {
                 zipStream.finish();
                 zipStream.close();
+                zipStream = null;
             }
-            if(buffer!=null) ((DirectBuffer)buffer).cleaner().clean();
-
+            if(buffer!=null) {
+                ((DirectBuffer)buffer).cleaner().clean();
+                buffer = null;
+            }
             if (channel != null && channel.isOpen()) channel.close();
             if (out != null) out.close();
-            buffer = null;
-            zipStream = null;
             channel = null;
             out = null;
         } catch (IOException e) {
@@ -152,7 +153,7 @@ public class FileBuffer {
 
     class ByteBufferStream extends OutputStream {
         @Override
-        public synchronized void write(int b) throws IOException {//outputStream的写方法
+        public synchronized void write(int b) throws IOException {
             // TODO Auto-generated method stub
             buffer.put((byte) b);
         }
