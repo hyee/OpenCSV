@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream;
  * Created by 1506428 on 7/18/2015.
  */
 public class FileBuffer implements Closeable {
-    public static int BUFFER_RESERVED_SIZE = 2097152;
+    public static int BUFFER_RESERVED_SIZE = 32767;
     public String fileName;
     public String extName;
     public File file;
@@ -58,8 +58,8 @@ public class FileBuffer implements Closeable {
             out = new RandomAccessFile(file, "rw");
             channel = out.getChannel();
             this.bufferSize = bufferSize;
-            buffer = ByteBuffer.allocateDirect(bufferSize + BUFFER_RESERVED_SIZE);
-            buffer.order(ByteOrder.nativeOrder());
+
+
             if (isZip) {
                 BufferedOutputStream buff = new BufferedOutputStream(Channels.newOutputStream(channel));
                 if (zipType.equals("zip")) {
@@ -67,7 +67,10 @@ public class FileBuffer implements Closeable {
                     zip.putNextEntry(new ZipEntry(fileName + (extName.equals(null)  ? "" : "." + default_ext)));
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(buff, true);
-            }
+                buffer = ByteBuffer.allocate(bufferSize + BUFFER_RESERVED_SIZE);
+            } else
+                buffer = ByteBuffer.allocateDirect(bufferSize + BUFFER_RESERVED_SIZE);
+            buffer.order(ByteOrder.nativeOrder());
             if(charset!=null) this.charset=Charset.forName(charset);
 
         } catch (IOException e) {
@@ -107,12 +110,10 @@ public class FileBuffer implements Closeable {
                 currentBytes = buffer.position();
                 position += currentBytes;
                 buffer.flip();
-                if (zipStream == null) channel.write(buffer);
-                else {
-                    byte[] bytes = new byte[currentBytes];
-                    buffer.get(bytes, 0, bytes.length);
-                    zipStream.write(bytes);
-                }
+                if (zipStream == null)
+                    channel.write(buffer);
+                else
+                    zipStream.write(buffer.array());
                 currentBytes = 0;
                 buffer.clear();
                 return true;
@@ -138,7 +139,7 @@ public class FileBuffer implements Closeable {
                 zipStream = null;
             }
             if(buffer!=null) {
-                ((DirectBuffer)buffer).cleaner().clean();
+                if(buffer.isDirect()) ((DirectBuffer)buffer).cleaner().clean();
                 buffer = null;
             }
             if (channel != null && channel.isOpen()) channel.close();
