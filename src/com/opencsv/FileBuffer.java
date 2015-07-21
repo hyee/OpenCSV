@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream;
  * Created by 1506428 on 7/18/2015.
  */
 public class FileBuffer implements Closeable {
-    public static int BUFFER_RESERVED_SIZE = 32767;
+    public static int BUFFER_RESERVED_SIZE = 1048576;
     public String fileName;
     public String extName;
     public File file;
@@ -30,22 +30,24 @@ public class FileBuffer implements Closeable {
     protected FileChannel channel;
     protected int currentBytes = 0;
     protected Charset charset;
+    protected byte[] bList = new byte[BUFFER_RESERVED_SIZE];
+    protected int bLen = 0;
 
 
-    public FileBuffer(int bufferSize, String path, String default_ext,String charset) throws IOException {
+    public FileBuffer(int bufferSize, String path, String default_ext, String charset) throws IOException {
         try {
             file = new File(path);
             fileName = file.getName();
             int index = fileName.lastIndexOf(".");
-            Boolean isZip=false;
+            Boolean isZip = false;
             if (index > -1) {
                 extName = fileName.substring(index + 1);
                 fileName = fileName.substring(0, index);
                 if (extName.equalsIgnoreCase("zip") || extName.equalsIgnoreCase("gz")) {
                     zipType = extName.toLowerCase();
-                    isZip=true;
+                    isZip = true;
                     index = fileName.lastIndexOf(".");
-                    if(default_ext!=null&&index>-1&&fileName.substring(index + 1).equalsIgnoreCase(default_ext)) {
+                    if (default_ext != null && index > -1 && fileName.substring(index + 1).equalsIgnoreCase(default_ext)) {
                         extName = default_ext;
                         fileName = fileName.substring(0, index);
                     }
@@ -59,19 +61,18 @@ public class FileBuffer implements Closeable {
             channel = out.getChannel();
             this.bufferSize = bufferSize;
 
-
             if (isZip) {
                 BufferedOutputStream buff = new BufferedOutputStream(Channels.newOutputStream(channel));
                 if (zipType.equals("zip")) {
                     ZipOutputStream zip = new ZipOutputStream(buff);
-                    zip.putNextEntry(new ZipEntry(fileName + (extName.equals(null)  ? "" : "." + default_ext)));
+                    zip.putNextEntry(new ZipEntry(fileName + (extName.equals(null) ? "" : "." + default_ext)));
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(buff, true);
-                buffer = ByteBuffer.allocate(bufferSize + BUFFER_RESERVED_SIZE);
-            } else
+            } else {
                 buffer = ByteBuffer.allocateDirect(bufferSize + BUFFER_RESERVED_SIZE);
-            buffer.order(ByteOrder.nativeOrder());
-            if(charset!=null) this.charset=Charset.forName(charset);
+                buffer.order(ByteOrder.nativeOrder());
+            }
+            if (charset != null) this.charset = Charset.forName(charset);
 
         } catch (IOException e) {
             close();
@@ -80,42 +81,74 @@ public class FileBuffer implements Closeable {
     }
 
     public FileBuffer(int bufferSize, String path, String default_ext) throws IOException {
-        this(bufferSize,path,default_ext,null);
+        this(bufferSize, path, default_ext, null);
     }
 
     public FileBuffer(int bufferSize, String path) throws IOException {
-        this(bufferSize,path,null);
+        this(bufferSize, path, null);
     }
 
-    public FileBuffer write(byte[] bytes) {
-        currentBytes += bytes.length;
-        buffer.put(bytes);
+    public void fill(boolean force) throws IOException {
+        try {
+            if (bLen == 0 || (!force && bLen != BUFFER_RESERVED_SIZE)) return;
+            if (zipStream != null) zipStream.write(bList, 0, bLen);
+            else buffer.put(bList,0,bLen);
+            currentBytes += bLen;
+            bLen = 0;
+        } catch (IOException e) {
+            bLen = 0;
+            currentBytes = 0;
+            e.printStackTrace();
+            close();
+            throw e;
+        }
+    }
+
+    public void copy(byte[] bytes, int startPos,int len) {
+        for(int i=0;i<len;i++)  bList[bLen++]=bytes[startPos+i];
+    }
+
+    public FileBuffer write(byte[] bytes, int startPos) throws IOException {
+        int len = bytes.length - startPos;
+        int remain = BUFFER_RESERVED_SIZE - bLen;
+        if (remain < len) {
+            copy(bytes, startPos, remain);
+            bLen = BUFFER_RESERVED_SIZE;
+            fill(true);
+            return write(bytes, remain);
+        } else {
+            copy(bytes, startPos, len);
+            fill(false);
+            return this;
+        }
+    }
+
+    public FileBuffer write(byte[] bytes) throws IOException {
+        return write(bytes, 0);
+    }
+
+    public FileBuffer write(char c) throws IOException {
+        ++bLen;
+        bList[bLen-1] = (byte) c;
+        fill(false);
         return this;
     }
 
-    public FileBuffer write(char c) {
-        ++currentBytes;
-        buffer.put((byte)c);
-        return this;
-
-    }
-
-    public FileBuffer write(String str) {
+    public FileBuffer write(String str) throws IOException {
         return write(str.getBytes());
     }
 
     public boolean flush(boolean force) throws IOException {
         try {
+            fill(force);
             if (currentBytes > 0 && (force || currentBytes >= bufferSize - 1024)) {
-                currentBytes = buffer.position();
                 position += currentBytes;
-                buffer.flip();
-                if (zipStream == null)
+                if (zipStream == null) {
+                    buffer.flip();
                     channel.write(buffer);
-                else
-                    zipStream.write(buffer.array());
+                    buffer.clear();
+                }
                 currentBytes = 0;
-                buffer.clear();
                 return true;
             }
             return false;
@@ -133,38 +166,25 @@ public class FileBuffer implements Closeable {
     public void close() {
         try {
             flush(true);
-            if (zipStream != null) {
-                zipStream.finish();
-                zipStream.close();
-                zipStream = null;
+            if (channel != null && channel.isOpen()) {
+                if (zipStream != null) {
+                    zipStream.finish();
+                    zipStream.close();
+                }
+                channel.close();
             }
-            if(buffer!=null) {
-                if(buffer.isDirect()) ((DirectBuffer)buffer).cleaner().clean();
-                buffer = null;
-            }
-            if (channel != null && channel.isOpen()) channel.close();
+            if (buffer != null && buffer.isDirect()) ((DirectBuffer) buffer).cleaner().clean();
             if (out != null) out.close();
             channel = null;
             out = null;
+            buffer = null;
+            zipStream = null;
+            bList = null;
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
-    class ByteBufferStream extends OutputStream {
-        @Override
-        public synchronized void write(int b) throws IOException {
-            // TODO Auto-generated method stub
-            buffer.put((byte) b);
-        }
-
-        @Override
-        public synchronized void write(byte[] bytes, int off, int len) throws IOException {
-            buffer.put(bytes, off, len);
-        }
-
-    }
 }
 
 
