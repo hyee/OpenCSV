@@ -41,14 +41,12 @@ public class SQLWriter extends CSVWriter {
                 lineWidth = 4;
             }
             String nextElement = nextLine[i];
-            Boolean isString = resultService!=null &&resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals("");
+            Boolean isString = resultService != null && resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals("");
 
             if (isString) {
                 add(quotechar);
-                if(nextElement.lastIndexOf(quotechar)>=0)
-                    processLine(nextElement);
-                else
-                    add(nextElement);
+                if (nextElement.lastIndexOf(quotechar) >= 0) processLine(nextElement);
+                else add(nextElement);
                 add(quotechar);
             } else {
                 add(nextElement.equals("") ? "null" : nextElement);
@@ -72,7 +70,7 @@ public class SQLWriter extends CSVWriter {
     }
 
     public void setCSVDataTypes(ResultSet rs) throws SQLException {
-        resultService=new ResultSetHelperService(rs);
+        resultService = new ResultSetHelperService(rs);
     }
 
     public int writeAll2SQL(ResultSet rs) throws SQLException, IOException {
@@ -99,9 +97,9 @@ public class SQLWriter extends CSVWriter {
         return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
     }
 
-    public int writeAll2SQL(String CSVFileSource,ResultSet rs) throws IOException,SQLException {
+    public int writeAll2SQL(String CSVFileSource, ResultSet rs) throws IOException, SQLException {
         this.CSVFileName = CSVFileSource;
-        if(rs!=null&&!rs.isClosed()) setCSVDataTypes(rs);
+        if (rs != null && !rs.isClosed()) setCSVDataTypes(rs);
         return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
     }
 
@@ -109,7 +107,7 @@ public class SQLWriter extends CSVWriter {
         String[] array = reader.readNext();
         String types[] = new String[array.length];
         for (int i = 0; i < array.length; i++) types[i] = "string";
-        if (resultService!=null&&resultService.columnNames != null) {
+        if (resultService != null && resultService.columnNames != null) {
             for (int i = 0; i < resultService.columnNames.length; i++)
                 for (int j = 0; j < array.length; j++)
                     if (resultService.columnNames[i].equalsIgnoreCase(array[j].trim())) {

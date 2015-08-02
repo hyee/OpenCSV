@@ -56,7 +56,7 @@ public class CSVWriter implements Closeable {
      * Default line terminator uses platform encoding.
      */
     public static final String DEFAULT_LINE_END = "\n";
-    public static int INITIAL_BUFFER_SIZE = 8000000;
+    public static int INITIAL_BUFFER_SIZE = 8 << 20; //8 MB
     protected char separator;
     protected char quotechar;
     protected char escapechar;
@@ -170,7 +170,7 @@ public class CSVWriter implements Closeable {
     }
 
     protected CSVWriter add(String str) throws IOException {
-        buffer.write(str.getBytes());
+        buffer.write(str);
         int len = str.length();
         lineWidth += len;
         return this;

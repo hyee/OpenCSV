@@ -13,11 +13,9 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-/**
- * Created by 1506428 on 7/18/2015.
- */
+
 public class FileBuffer implements Closeable {
-    public static int BUFFER_RESERVED_SIZE = 1048576;
+    public static int BUFFER_RESERVED_SIZE = 1 << 20;
     public String fileName;
     public String extName;
     public File file;
@@ -69,6 +67,7 @@ public class FileBuffer implements Closeable {
                     zipStream = zip;
                 } else zipStream = new GZIPOutputStream(buff, true);
             } else {
+                zipType = null;
                 buffer = ByteBuffer.allocateDirect(bufferSize + BUFFER_RESERVED_SIZE);
                 buffer.order(ByteOrder.nativeOrder());
             }
@@ -88,39 +87,27 @@ public class FileBuffer implements Closeable {
         this(bufferSize, path, null);
     }
 
-    public void fill(boolean force) throws IOException {
+    protected void fill(boolean force) throws IOException {
+        if ((!force && bLen < BUFFER_RESERVED_SIZE) || bLen == 0 || channel == null||!channel.isOpen()) return;
         try {
-            if (bLen == 0 || (!force && bLen != BUFFER_RESERVED_SIZE)) return;
-            if (zipStream != null) zipStream.write(bList, 0, bLen);
-            else buffer.put(bList,0,bLen);
+            if (zipType != null) zipStream.write(bList, 0, bLen);
+            else buffer.put(bList, 0, bLen);
             currentBytes += bLen;
             bLen = 0;
         } catch (IOException e) {
             bLen = 0;
             currentBytes = 0;
-            e.printStackTrace();
             close();
             throw e;
         }
     }
 
-    public void copy(byte[] bytes, int startPos,int len) {
-        for(int i=0;i<len;i++)  bList[bLen++]=bytes[startPos+i];
-    }
-
     public FileBuffer write(byte[] bytes, int startPos) throws IOException {
-        int len = bytes.length - startPos;
-        int remain = BUFFER_RESERVED_SIZE - bLen;
-        if (remain < len) {
-            copy(bytes, startPos, remain);
-            bLen = BUFFER_RESERVED_SIZE;
-            fill(true);
-            return write(bytes, remain);
-        } else {
-            copy(bytes, startPos, len);
+        for (byte b : bytes) {
+            bList[bLen++] = b;
             fill(false);
-            return this;
         }
+        return this;
     }
 
     public FileBuffer write(byte[] bytes) throws IOException {
@@ -128,8 +115,7 @@ public class FileBuffer implements Closeable {
     }
 
     public FileBuffer write(char c) throws IOException {
-        ++bLen;
-        bList[bLen-1] = (byte) c;
+        bList[bLen++] = (byte) c;
         fill(false);
         return this;
     }
@@ -143,7 +129,7 @@ public class FileBuffer implements Closeable {
             fill(force);
             if (currentBytes > 0 && (force || currentBytes >= bufferSize - 1024)) {
                 position += currentBytes;
-                if (zipStream == null) {
+                if (zipType == null) {
                     buffer.flip();
                     channel.write(buffer);
                     buffer.clear();
@@ -186,5 +172,4 @@ public class FileBuffer implements Closeable {
     }
 
 }
-
 

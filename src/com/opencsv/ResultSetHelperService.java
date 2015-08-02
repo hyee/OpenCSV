@@ -33,9 +33,9 @@ public class ResultSetHelperService {
     public int columnCount;
     public String[] columnNames;
     public String[] columnTypes;
-    public int[]    columnTypesI;
+    public int[] columnTypesI;
     public String[] rowValue;
-    public long cost =0;
+    public long cost = 0;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
@@ -45,7 +45,7 @@ public class ResultSetHelperService {
      * Default Constructor.
      */
     public ResultSetHelperService(ResultSet res, int fetchSize) throws SQLException {
-        long sec= System.nanoTime();
+        long sec = System.nanoTime();
         rs = res;
         rs.setFetchSize(fetchSize);
         rs.setFetchDirection(ResultSet.FETCH_FORWARD);
@@ -54,7 +54,7 @@ public class ResultSetHelperService {
         rowValue = new String[columnCount];
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
-        columnTypesI= new int[columnCount];
+        columnTypesI = new int[columnCount];
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             int type = metadata.getColumnType(i + 1);
             String value;
@@ -101,11 +101,11 @@ public class ResultSetHelperService {
                 default:
                     value = "string";
             }
-            columnTypesI[i]= type;
+            columnTypesI[i] = type;
             columnTypes[i] = value.intern();
             columnNames[i] = metadata.getColumnName(i + 1).intern();
         }
-        cost += System.nanoTime()-sec;
+        cost += System.nanoTime() - sec;
     }
 
     public ResultSetHelperService(ResultSet res) throws SQLException {
@@ -147,7 +147,7 @@ public class ResultSetHelperService {
      * @throws IOException  - thrown by the result set.
      */
     public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
-        long sec=System.nanoTime();
+        long sec = System.nanoTime();
         if (!rs.next()) {
             rs.close();
             return null;
@@ -155,7 +155,7 @@ public class ResultSetHelperService {
         for (int i = 0; i < columnCount; i++) {
             getColumnValue(columnTypes[i], i + 1, trim, dateFormatString, timeFormatString);
         }
-        cost += System.nanoTime()-sec;
+        cost += System.nanoTime() - sec;
         return rowValue;
     }
 
@@ -212,7 +212,7 @@ public class ResultSetHelperService {
                 if (bl != null) {
                     byte[] src = bl.getBytes(1, (int) bl.length());
                     bl.free();
-                    StringBuilder sb=new StringBuilder(src.length*2);
+                    StringBuilder sb = new StringBuilder(src.length * 2);
                     for (int i = 0; i < src.length; i++) {
                         int v = src[i] & 0xFF;
                         String hv = Integer.toHexString(v);
