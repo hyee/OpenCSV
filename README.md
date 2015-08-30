@@ -8,3 +8,4 @@ Requires JRE 1.7+.
 - Convert CSV file to SQL file(see SQLWriter.writeAll2SQL(<CSVFilePath>,...))
 - Convert ResultSet/CSV to Oracle SQL*Loader Files(Automatically)
 - Support automatically compression if destination file extension is ".zip" or ".gz"
+- Support Multi-threads processing to speed up performance(see CSVWriter.setAsyncMode(boolean) ) 
