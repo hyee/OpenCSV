@@ -15,9 +15,11 @@ package com.opencsv;
  limitations under the License.
  */
 
+import javax.security.auth.callback.Callback;
 import java.io.IOException;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * helper class for processing JDBC ResultSet objects.
@@ -28,8 +30,8 @@ public class ResultSetHelperService {
     // These types don't exist in Java 5
 
     public static int RESULT_FETCH_SIZE = 30000;
-    static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
     public int columnCount;
     public String[] columnNames;
     public String[] columnTypes;
@@ -41,10 +43,13 @@ public class ResultSetHelperService {
     private SimpleDateFormat timeTZFormat;
     private ResultSet rs;
 
+    ArrayBlockingQueue<String[]> queue;
+    private String[] EOF=new String[1];
+
     /**
      * Default Constructor.
      */
-    public ResultSetHelperService(ResultSet res, int fetchSize) throws SQLException {
+    public ResultSetHelperService(ResultSet res, int fetchSize, boolean async) throws SQLException {
         long sec = System.nanoTime();
         rs = res;
         rs.setFetchSize(fetchSize);
@@ -106,10 +111,11 @@ public class ResultSetHelperService {
             columnNames[i] = metadata.getColumnName(i + 1).intern();
         }
         cost += System.nanoTime() - sec;
+        if(async) queue=new ArrayBlockingQueue<String[]>(fetchSize*2);
     }
 
     public ResultSetHelperService(ResultSet res) throws SQLException {
-        this(res, RESULT_FETCH_SIZE);
+        this(res, RESULT_FETCH_SIZE,false);
     }
 
 
@@ -120,7 +126,7 @@ public class ResultSetHelperService {
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues() throws SQLException, IOException {
+    public String[] getColumnValues() throws SQLException, IOException,InterruptedException {
         return this.getColumnValues(true, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
@@ -132,7 +138,7 @@ public class ResultSetHelperService {
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues(boolean trim) throws SQLException, IOException {
+    public String[] getColumnValues(boolean trim) throws SQLException, IOException,InterruptedException {
         return this.getColumnValues(trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
@@ -146,17 +152,24 @@ public class ResultSetHelperService {
      * @throws SQLException - thrown by the result set.
      * @throws IOException  - thrown by the result set.
      */
-    public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
+    public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException,InterruptedException {
         long sec = System.nanoTime();
         if (!rs.next()) {
             rs.close();
             return null;
         }
+
         for (int i = 0; i < columnCount; i++) {
             getColumnValue(columnTypes[i], i + 1, trim, dateFormatString, timeFormatString);
         }
         cost += System.nanoTime() - sec;
+
+        if(queue!=null) queue.put(rowValue.clone());
         return rowValue;
+    }
+
+    public String[] getAsyncColumnValues() throws  InterruptedException{
+        return queue.take();
     }
 
     /**
@@ -249,5 +262,30 @@ public class ResultSetHelperService {
             rowValue[colIndex - 1] = "";
         }
         if (trim) rowValue[colIndex - 1] = rowValue[colIndex - 1].trim();
+    }
+
+    public void startAsyncFetch(final RowCallback c) throws SQLException, IOException,InterruptedException {
+        Thread t=new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String[] values;
+                    for(;;) {
+                        values = getAsyncColumnValues();
+                        if(values==null) {
+                            queue=null;
+                            return;
+                        }
+                        c.execute(values);
+                    }
+                } catch (Exception e) {}
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        while (getColumnValues()!=null) ;
+        queue.put(EOF);
+        rs.close();
+        t.join();
     }
 }

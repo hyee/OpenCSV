@@ -73,16 +73,23 @@ public class SQLWriter extends CSVWriter {
         resultService = new ResultSetHelperService(rs);
     }
 
-    public int writeAll2SQL(ResultSet rs) throws SQLException, IOException {
+    public int writeAll2SQL(ResultSet rs) throws SQLException, IOException,InterruptedException {
         return writeAll2SQL(rs, "", 9999);
     }
 
-    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException {
+    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException,InterruptedException {
         resultService = new ResultSetHelperService(rs);
         init(resultService.columnNames, headerEncloser, maxLineWidth);
-        String[] values;
-        while ((values = resultService.getColumnValues()) != null) {
-            writeNextRow(values);
+        if(asyncMode) {
+            resultService.startAsyncFetch(new RowCallback() {
+                @Override
+                public void execute(String[] row) throws Exception {
+                    writeNextRow(row);
+                }
+            });
+        } else {
+            String[] values;
+            while((values=resultService.getColumnValues())!=null)  writeNextRow(values);
         }
         close();
         return totalRows;

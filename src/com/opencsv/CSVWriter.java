@@ -67,8 +67,8 @@ public class CSVWriter implements Closeable {
     protected PrintWriter logWriter;
     protected String CSVFileName;
     protected ResultSetHelperService resultService;
-
     protected FileBuffer buffer;
+    protected boolean asyncMode=false;
 
 
     /**
@@ -158,7 +158,7 @@ public class CSVWriter implements Closeable {
         this.lineEnd = lineEnd;
     }
 
-
+    public void setAsyncMode(boolean mode) {asyncMode=mode;}
     public void setBufferSize(int bytes) {
         INITIAL_BUFFER_SIZE = bytes;
     }
@@ -241,7 +241,7 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException {
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException,InterruptedException {
         return writeAll(rs, includeColumnNames, true);
     }
 
@@ -256,15 +256,23 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException {
-        resultService = new ResultSetHelperService(rs);
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException,InterruptedException {
+        resultService = new ResultSetHelperService(rs,ResultSetHelperService.RESULT_FETCH_SIZE,asyncMode);
         if (includeColumnNames) {
             writeColumnNames();
             if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, quotechar);
         }
-        String[] values;
-        while ((values = resultService.getColumnValues(trim)) != null) {
-            writeNext(values);
+
+        if(asyncMode) {
+            resultService.startAsyncFetch(new RowCallback() {
+                @Override
+                public void execute(String[] row) throws Exception {
+                    writeNext(row);
+                }
+            });
+        } else {
+            String[] values;
+            while((values=resultService.getColumnValues(true))!=null)  writeNext(values);
         }
         close();
         return totalRows;
