@@ -34,29 +34,30 @@ public class CSVWriter implements Closeable {
     /**
      * The character used for escaping quotes.
      */
-    public static final char DEFAULT_ESCAPE_CHARACTER = '"';
+    public static char DEFAULT_ESCAPE_CHARACTER = '"';
     /**
      * The default separator to use if none is supplied to the constructor.
      */
-    public static final char DEFAULT_SEPARATOR = ',';
+    public static char DEFAULT_SEPARATOR = ',';
     /**
      * The default quote character to use if none is supplied to the
      * constructor.
      */
-    public static final char DEFAULT_QUOTE_CHARACTER = '"';
+    public static char DEFAULT_QUOTE_CHARACTER = '"';
     /**
      * The quote constant to use when you wish to suppress all quoting.
      */
-    public static final char NO_QUOTE_CHARACTER = '\u0000';
+    public static char NO_QUOTE_CHARACTER = '\u0000';
     /**
      * The escape constant to use when you wish to suppress all escaping.
      */
-    public static final char NO_ESCAPE_CHARACTER = '\u0000';
+    public static char NO_ESCAPE_CHARACTER = '\u0000';
     /**
      * Default line terminator uses platform encoding.
      */
-    public static final String DEFAULT_LINE_END = "\n";
+    public static String DEFAULT_LINE_END = "\n";
     public static int INITIAL_BUFFER_SIZE = 8 << 20; //8 MB
+
     protected char separator;
     protected char quotechar;
     protected char escapechar;
@@ -68,7 +69,7 @@ public class CSVWriter implements Closeable {
     protected String CSVFileName;
     protected ResultSetHelperService resultService;
     protected FileBuffer buffer;
-    protected boolean asyncMode=false;
+    protected boolean asyncMode = false;
 
 
     /**
@@ -158,7 +159,10 @@ public class CSVWriter implements Closeable {
         this.lineEnd = lineEnd;
     }
 
-    public void setAsyncMode(boolean mode) {asyncMode=mode;}
+    public void setAsyncMode(boolean mode) {
+        asyncMode = mode;
+    }
+
     public void setBufferSize(int bytes) {
         INITIAL_BUFFER_SIZE = bytes;
     }
@@ -241,7 +245,7 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException,InterruptedException {
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException, InterruptedException {
         return writeAll(rs, includeColumnNames, true);
     }
 
@@ -256,14 +260,14 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException,InterruptedException {
-        resultService = new ResultSetHelperService(rs,ResultSetHelperService.RESULT_FETCH_SIZE,asyncMode);
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException, InterruptedException {
+        resultService = new ResultSetHelperService(rs);
         if (includeColumnNames) {
             writeColumnNames();
             if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, quotechar);
         }
 
-        if(asyncMode) {
+        if (asyncMode) {
             resultService.startAsyncFetch(new RowCallback() {
                 @Override
                 public void execute(String[] row) throws Exception {
@@ -272,7 +276,7 @@ public class CSVWriter implements Closeable {
             });
         } else {
             String[] values;
-            while((values=resultService.getColumnValues(true))!=null)  writeNext(values);
+            while ((values = resultService.getColumnValues(true)) != null) writeNext(values);
         }
         close();
         return totalRows;

@@ -15,12 +15,9 @@ package com.opencsv;
  limitations under the License.
  */
 
-import javax.security.auth.callback.Callback;
 import java.io.IOException;
-import java.io.InputStream;
 import java.sql.*;
 import java.text.SimpleDateFormat;
-import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 
 /**
@@ -46,16 +43,17 @@ public class ResultSetHelperService {
     private SimpleDateFormat timeTZFormat;
     private ResultSet rs;
 
-    ArrayBlockingQueue<Object[]> queue;
-    private Object[] EOF=new Object[1];
+    private ArrayBlockingQueue<Object[]> queue;
+    private Object[] EOF = new Object[1];
 
     /**
      * Default Constructor.
      */
-    public ResultSetHelperService(ResultSet res, int fetchSize, boolean async) throws SQLException {
+    public ResultSetHelperService(ResultSet res, int fetchSize) throws SQLException {
         long sec = System.nanoTime();
         rs = res;
         rs.setFetchSize(fetchSize);
+        RESULT_FETCH_SIZE = fetchSize;
         rs.setFetchDirection(ResultSet.FETCH_FORWARD);
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
@@ -107,11 +105,9 @@ public class ResultSetHelperService {
                     value = "clob";
                     break;
                 case Types.BINARY:
-                case -3:
-                    value = "raw";
-                    break;
+                case Types.VARBINARY:
                 case Types.LONGVARBINARY:
-                    value = "longraw";
+                    value = "raw";
                     break;
                 default:
                     value = "string";
@@ -121,14 +117,10 @@ public class ResultSetHelperService {
             columnNames[i] = metadata.getColumnName(i + 1).intern();
         }
         cost += System.nanoTime() - sec;
-        if(async) {
-            queue=new ArrayBlockingQueue<Object[]>(fetchSize*2);
-            rowObject=new Object[columnCount];
-        }
     }
 
     public ResultSetHelperService(ResultSet res) throws SQLException {
-        this(res, RESULT_FETCH_SIZE,false);
+        this(res, RESULT_FETCH_SIZE);
     }
 
 
@@ -171,13 +163,22 @@ public class ResultSetHelperService {
             rs.close();
             return null;
         }
-
+        Object o;
         for (int i = 0; i < columnCount; i++) {
-            if(queue==null) {
-                rowValue[i] = getColumnValue(rs.getObject(i+1),columnTypes[i],trim, dateFormatString, timeFormatString);
-                if(rowValue[i] ==null) rowValue[i] ="";
+            switch (columnTypes[i]) {
+                case "timestamptz":
+                    o = rs.getTimestamp(i + 1);
+                    break;
+                case "raw":
+                    o = rs.getString(i + 1);
+                    break;
+                default:
+                    o = rs.getObject(i + 1);
             }
-            else rowObject[i]=rs.getObject(i+1);
+            if (o != null && rs.wasNull()) o = null;
+            if (queue == null)
+                rowValue[i] = getColumnValue(o, columnTypes[i], trim, dateFormatString, timeFormatString);
+            else rowObject[i] = o;
         }
         cost += System.nanoTime() - sec;
         return rowValue;
@@ -202,7 +203,6 @@ public class ResultSetHelperService {
         }
         return date == null ? null : dateFormat.format(date);
     }
-
 
     protected String handleTimestamp(Timestamp timestamp, String timestampFormatString) {
         if (timeFormat == null) {
@@ -232,8 +232,8 @@ public class ResultSetHelperService {
         return sb.toString().toUpperCase();
     }
 
-    private String getColumnValue(Object o,String colType,  boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
-        if(o==null) return "";
+    private String getColumnValue(Object o, String colType, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
+        if (o == null) return "";
         switch (colType) {
             case "object":
                 return handleObject(o);
@@ -242,22 +242,21 @@ public class ResultSetHelperService {
                 return Boolean.valueOf(b).toString();
             case "blob":
                 Blob bl = (Blob) o;
-                    byte[] src = bl.getBytes(1, (int) bl.length());
-                    bl.free();
-                    return handleBytes(src);
+                byte[] src = bl.getBytes(1, (int) bl.length());
+                bl.free();
+                return handleBytes(src);
             case "clob":
                 Clob c = (Clob) o;
-                    String str = c.getSubString(1, (int) c.length());
-                    c.free();
+                String str = c.getSubString(1, (int) c.length());
+                c.free();
                 return str;
             case "date":
             case "time":
-                return handleDate((Date)o, dateFormatString);
+                return handleDate((Date) o, dateFormatString);
             case "timestamp":
                 return handleTimestamp((Timestamp) o, timestampFormatString);
             case "timestamptz":
                 return handleTimestampTZ((Timestamp) o, timestampFormatString);
-            case "raw":
             case "longraw":
                 return handleBytes((byte[]) o);
             default:
@@ -265,40 +264,47 @@ public class ResultSetHelperService {
         }
     }
 
-    public void startAsyncFetch(final RowCallback c,final boolean trim, final String dateFormatString, final String timeFormatString)  throws SQLException, IOException,InterruptedException {
-        Thread t=new Thread(new Runnable() {
+    public void startAsyncFetch(final RowCallback c, final boolean trim, final String dateFormatString, final String timeFormatString) throws SQLException, IOException, InterruptedException {
+        queue = new ArrayBlockingQueue<Object[]>(RESULT_FETCH_SIZE * 2 + 10);
+        rowObject = new Object[columnCount];
+        Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     Object[] values;
-                    for(;;) {
+                    for (; ; ) {
                         values = queue.take();
-                        if(values==EOF) {
-                            queue=null;
+                        if (values == EOF) {
+                            queue = null;
                             return;
                         }
-                        for (int i = 0; i < columnCount; i++) {
-                            rowValue[i] = getColumnValue(values[i],columnTypes[i], trim, dateFormatString, timeFormatString);
-                            if(rowValue[i] ==null) rowValue[i] ="";
-                        }
+                        for (int i = 0; i < columnCount; i++)
+                            rowValue[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
+
                         c.execute(rowValue);
                     }
-                } catch (Exception e) {e.printStackTrace();}
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    queue = null;
+                }
             }
         });
         t.setDaemon(true);
         t.start();
-        while (getColumnValues()!=null) queue.put(rowObject.clone());
-        queue.put(EOF);
+        while (queue != null && getColumnValues() != null) {
+            queue.put(rowObject);
+            rowObject = new Object[columnCount];
+        }
+        if (queue != null) queue.put(EOF);
         rs.close();
         t.join();
     }
 
-    public void startAsyncFetch(final RowCallback c,boolean trim) throws SQLException, IOException,InterruptedException {
-        startAsyncFetch(c,trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
+    public void startAsyncFetch(final RowCallback c, boolean trim) throws SQLException, IOException, InterruptedException {
+        startAsyncFetch(c, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
-    public void startAsyncFetch(final RowCallback c) throws SQLException, IOException,InterruptedException {
-        startAsyncFetch(c,true);
+    public void startAsyncFetch(final RowCallback c) throws SQLException, IOException, InterruptedException {
+        startAsyncFetch(c, true);
     }
 }

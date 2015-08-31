@@ -11,7 +11,7 @@ import java.sql.SQLException;
 public class SQLWriter extends CSVWriter {
 
     protected String columns;
-    private int maxLineWidth;
+    public static int maxLineWidth=1500;
     private String fileHeader = "";
 
     public SQLWriter(Writer writer) {
@@ -41,7 +41,7 @@ public class SQLWriter extends CSVWriter {
                 lineWidth = 4;
             }
             String nextElement = nextLine[i];
-            Boolean isString = resultService != null && resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals("");
+            Boolean isString = resultService == null || (resultService.columnTypes[i] != "number" && resultService.columnTypes[i] != "boolean" && !nextElement.equals(""));
 
             if (isString) {
                 add(quotechar);
@@ -73,14 +73,14 @@ public class SQLWriter extends CSVWriter {
         resultService = new ResultSetHelperService(rs);
     }
 
-    public int writeAll2SQL(ResultSet rs) throws SQLException, IOException,InterruptedException {
+    public int writeAll2SQL(ResultSet rs) throws SQLException, IOException, InterruptedException {
         return writeAll2SQL(rs, "", 9999);
     }
 
-    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException,InterruptedException {
+    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException, InterruptedException {
         resultService = new ResultSetHelperService(rs);
         init(resultService.columnNames, headerEncloser, maxLineWidth);
-        if(asyncMode) {
+        if (asyncMode) {
             resultService.startAsyncFetch(new RowCallback() {
                 @Override
                 public void execute(String[] row) throws Exception {
@@ -89,7 +89,7 @@ public class SQLWriter extends CSVWriter {
             });
         } else {
             String[] values;
-            while((values=resultService.getColumnValues())!=null)  writeNextRow(values);
+            while ((values = resultService.getColumnValues()) != null) writeNextRow(values);
         }
         close();
         return totalRows;

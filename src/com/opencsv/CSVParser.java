@@ -32,10 +32,6 @@ import java.util.List;
 public class CSVParser {
 
     /**
-     * The default separator to use if none is supplied to the constructor.
-     */
-    public static final char DEFAULT_SEPARATOR = ',';
-    /**
      * The average size of a line read by openCSV (used for setting the size of StringBuilders).
      */
     public static final int INITIAL_READ_SIZE = 128;
@@ -67,6 +63,10 @@ public class CSVParser {
      * This is the "null" character - if a value is set to this then it is ignored.
      */
     public static final char NULL_CHARACTER = '\0';
+    /**
+     * The default separator to use if none is supplied to the constructor.
+     */
+    public static char DEFAULT_SEPARATOR = ',';
     /**
      * This is the character that the CSVParser will treat as the separator.
      */
@@ -291,7 +291,7 @@ public class CSVParser {
      * @throws IOException if bad things happen during the read
      */
     private String[] parseLine(String nextLine, boolean multi) throws IOException {
-
+        //System.out.println(this.separator);
         if (!multi && pending != null) {
             pending = null;
         }
