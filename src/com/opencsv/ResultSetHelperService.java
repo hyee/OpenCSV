@@ -45,6 +45,7 @@ public class ResultSetHelperService {
 
     private ArrayBlockingQueue<Object[]> queue;
     private Object[] EOF = new Object[1];
+    private boolean isFinished;
 
     /**
      * Default Constructor.
@@ -58,6 +59,7 @@ public class ResultSetHelperService {
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
         rowValue = new String[columnCount];
+        isFinished = false;
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
         columnTypesI = new int[columnCount];
@@ -161,6 +163,7 @@ public class ResultSetHelperService {
         long sec = System.nanoTime();
         if (!rs.next()) {
             rs.close();
+            isFinished = true;
             return null;
         }
         Object o;
@@ -275,7 +278,6 @@ public class ResultSetHelperService {
 
     public void startAsyncFetch(final RowCallback c, final boolean trim, final String dateFormatString, final String timeFormatString) throws SQLException, IOException, InterruptedException {
         queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
-        rowObject = new Object[columnCount];
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -283,28 +285,23 @@ public class ResultSetHelperService {
                     Object[] values;
                     for (; ; ) {
                         values = queue.take();
-                        if (values == EOF) {
-                            queue = null;
-                            return;
-                        }
+                        if (values == EOF) break;
                         for (int i = 0; i < columnCount; i++)
                             rowValue[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
                         c.execute(rowValue);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
+                } finally {
                     queue = null;
                 }
             }
         });
         t.setDaemon(true);
         t.start();
-        while (queue != null && getColumnValues() != null) {
-            queue.put(rowObject);
-            rowObject = new Object[columnCount];
-        }
-        if (queue != null) queue.put(EOF);
-        rs.close();
+
+        while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
+            queue.put(getColumnValues() == null ? EOF : rowObject);
         t.join();
     }
 
