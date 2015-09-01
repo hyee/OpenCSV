@@ -10,8 +10,8 @@ import java.sql.SQLException;
 
 public class SQLWriter extends CSVWriter {
 
+    public static int maxLineWidth = 1500;
     protected String columns;
-    public static int maxLineWidth=1500;
     private String fileHeader = "";
 
     public SQLWriter(Writer writer) {
@@ -113,6 +113,7 @@ public class SQLWriter extends CSVWriter {
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
         String[] array = reader.readNext();
         String types[] = new String[array.length];
+        DEFAULT_SEPARATOR=CSVParser.DEFAULT_SEPARATOR;
         for (int i = 0; i < array.length; i++) types[i] = "string";
         if (resultService != null && resultService.columnNames != null) {
             for (int i = 0; i < resultService.columnNames.length; i++)

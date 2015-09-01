@@ -396,7 +396,7 @@ public class CSVWriter implements Closeable {
         b.append("BADFILE     ").append(buffer.fileName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc").append("\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
-        b.append("FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
+        b.append("FIELDS TERMINATED BY '").append(DEFAULT_SEPARATOR).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (i > 0) b.append(",\n");
             ColName = '"' + titles[i] + '"';
