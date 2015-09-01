@@ -15,6 +15,7 @@ package com.opencsv;
  limitations under the License.
  */
 
+import javax.xml.bind.DatatypeConverter;
 import java.io.IOException;
 import java.sql.*;
 import java.text.SimpleDateFormat;
@@ -222,19 +223,6 @@ public class ResultSetHelperService {
         return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
 
-    protected String handleBytes(byte[] src) {
-        StringBuilder sb = new StringBuilder(src.length * 2);
-        for (int i = 0; i < src.length; i++) {
-            int v = src[i] & 0xFF;
-            String hv = Integer.toHexString(v);
-            if (hv.length() < 2) {
-                sb.append(0);
-            }
-            sb.append(hv);
-        }
-        return sb.toString().toUpperCase();
-    }
-
     private String getColumnValue(Object o, String colType, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return "";
         String str;
@@ -250,7 +238,7 @@ public class ResultSetHelperService {
                 Blob bl = (Blob) o;
                 byte[] src = bl.getBytes(1, (int) bl.length());
                 bl.free();
-                str = handleBytes(src);
+                str = DatatypeConverter.printHexBinary(src);
                 break;
             case "clob":
                 Clob c = (Clob) o;
@@ -268,7 +256,7 @@ public class ResultSetHelperService {
                 str = handleTimestampTZ((Timestamp) o, timestampFormatString);
                 break;
             case "longraw":
-                str = handleBytes((byte[]) o);
+                str = DatatypeConverter.printHexBinary((byte[]) o);
                 break;
             default:
                 str = o.toString();
