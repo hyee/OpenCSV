@@ -234,38 +234,47 @@ public class ResultSetHelperService {
 
     private String getColumnValue(Object o, String colType, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return "";
+        String str;
         switch (colType) {
             case "object":
-                return handleObject(o);
+                str = handleObject(o);
+                break;
             case "boolean":
                 boolean b = (Boolean) o;
-                return Boolean.valueOf(b).toString();
+                str = Boolean.valueOf(b).toString();
+                break;
             case "blob":
                 Blob bl = (Blob) o;
                 byte[] src = bl.getBytes(1, (int) bl.length());
                 bl.free();
-                return handleBytes(src);
+                str = handleBytes(src);
+                break;
             case "clob":
                 Clob c = (Clob) o;
-                String str = c.getSubString(1, (int) c.length());
+                str = c.getSubString(1, (int) c.length());
                 c.free();
-                return str;
+                break;
             case "date":
             case "time":
-                return handleDate((Date) o, dateFormatString);
+                str = handleDate((Date) o, dateFormatString);
+                break;
             case "timestamp":
-                return handleTimestamp((Timestamp) o, timestampFormatString);
+                str = handleTimestamp((Timestamp) o, timestampFormatString);
+                break;
             case "timestamptz":
-                return handleTimestampTZ((Timestamp) o, timestampFormatString);
+                str = handleTimestampTZ((Timestamp) o, timestampFormatString);
+                break;
             case "longraw":
-                return handleBytes((byte[]) o);
+                str = handleBytes((byte[]) o);
+                break;
             default:
-                return o.toString();
+                str = o.toString();
         }
+        return trim ? str.trim() : str;
     }
 
     public void startAsyncFetch(final RowCallback c, final boolean trim, final String dateFormatString, final String timeFormatString) throws SQLException, IOException, InterruptedException {
-        queue = new ArrayBlockingQueue<Object[]>(RESULT_FETCH_SIZE * 2 + 10);
+        queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         rowObject = new Object[columnCount];
         Thread t = new Thread(new Runnable() {
             @Override
@@ -280,7 +289,6 @@ public class ResultSetHelperService {
                         }
                         for (int i = 0; i < columnCount; i++)
                             rowValue[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
-
                         c.execute(rowValue);
                     }
                 } catch (Exception e) {

@@ -88,7 +88,7 @@ public class FileBuffer implements Closeable {
     }
 
     protected void fill(boolean force) throws IOException {
-        if ((!force && bLen < BUFFER_RESERVED_SIZE) || bLen == 0 || channel == null||!channel.isOpen()) return;
+        if ((!force && bLen < BUFFER_RESERVED_SIZE) || bLen == 0 || channel == null || !channel.isOpen()) return;
         try {
             if (zipType != null) zipStream.write(bList, 0, bLen);
             else buffer.put(bList, 0, bLen);

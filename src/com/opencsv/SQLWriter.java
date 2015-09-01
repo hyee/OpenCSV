@@ -113,7 +113,6 @@ public class SQLWriter extends CSVWriter {
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
         String[] array = reader.readNext();
         String types[] = new String[array.length];
-        DEFAULT_SEPARATOR=CSVParser.DEFAULT_SEPARATOR;
         for (int i = 0; i < array.length; i++) types[i] = "string";
         if (resultService != null && resultService.columnNames != null) {
             for (int i = 0; i < resultService.columnNames.length; i++)
@@ -122,7 +121,7 @@ public class SQLWriter extends CSVWriter {
                         array[j] = resultService.columnNames[i];
                         types[j] = resultService.columnTypes[i];
                     }
-            createOracleCtlFileFromHeaders(CSVFileName, array, reader.getParser().getQuotechar());
+            createOracleCtlFileFromHeaders(CSVFileName, array, reader.getParser().getQuotechar(), reader.seprator);
         }
         init(array, headerEncloser, maxLineWidth);
         while ((array = reader.readNext()) != null) {

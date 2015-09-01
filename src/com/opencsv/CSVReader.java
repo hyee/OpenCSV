@@ -39,6 +39,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * The default line to start reading.
      */
     public static final int DEFAULT_SKIP_LINES = 0;
+    public char seprator;
     private CSVParser parser;
     private int skipLines;
     private BufferedReader br;
@@ -201,6 +202,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         this.parser = csvParser;
         this.keepCR = keepCR;
         this.verifyReader = verifyReader;
+        this.seprator = csvParser.getSeparator();
     }
 
     /**

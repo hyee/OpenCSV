@@ -264,7 +264,8 @@ public class CSVWriter implements Closeable {
         resultService = new ResultSetHelperService(rs);
         if (includeColumnNames) {
             writeColumnNames();
-            if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, quotechar);
+            if (CSVFileName != null)
+                createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, quotechar, separator);
         }
 
         if (asyncMode) {
@@ -385,7 +386,7 @@ public class CSVWriter implements Closeable {
         System.runFinalization();
     }
 
-    public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser) throws IOException {
+    public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, char encloser, char seperator) throws IOException {
         File file = new File(CSVFileName);
         String FileName = file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".ctl";
         String ColName;
@@ -396,7 +397,7 @@ public class CSVWriter implements Closeable {
         b.append("BADFILE     ").append(buffer.fileName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc").append("\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
-        b.append("FIELDS TERMINATED BY '").append(DEFAULT_SEPARATOR).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
+        b.append("FIELDS TERMINATED BY '").append(separator).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (i > 0) b.append(",\n");
             ColName = '"' + titles[i] + '"';
