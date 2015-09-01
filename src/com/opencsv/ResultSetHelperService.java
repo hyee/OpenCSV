@@ -236,9 +236,8 @@ public class ResultSetHelperService {
                 break;
             case "blob":
                 Blob bl = (Blob) o;
-                byte[] src = bl.getBytes(1, (int) bl.length());
+                str = DatatypeConverter.printHexBinary(bl.getBytes(1, (int) bl.length()));
                 bl.free();
-                str = DatatypeConverter.printHexBinary(src);
                 break;
             case "clob":
                 Clob c = (Clob) o;
