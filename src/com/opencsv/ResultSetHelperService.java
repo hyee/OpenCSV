@@ -271,9 +271,7 @@ public class ResultSetHelperService {
             public void run() {
                 try {
                     Object[] values;
-                    for (; ; ) {
-                        values = queue.take();
-                        if (values == EOF) break;
+                    while ((values = queue.take())!=EOF) {
                         for (int i = 0; i < columnCount; i++)
                             rowValue[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
                         c.execute(rowValue);
