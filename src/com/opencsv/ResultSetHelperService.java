@@ -56,7 +56,9 @@ public class ResultSetHelperService {
         rs = res;
         rs.setFetchSize(fetchSize);
         RESULT_FETCH_SIZE = fetchSize;
-        rs.setFetchDirection(ResultSet.FETCH_FORWARD);
+        try {
+            rs.setFetchDirection(ResultSet.FETCH_FORWARD);
+        } catch (Exception e) {}
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
         rowValue = new String[columnCount];
