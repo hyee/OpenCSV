@@ -12,7 +12,7 @@ Requires JRE 1.7+.
 
 # Performance
 In Async mode, the program spends very few time on converting fields and writing file.<br/>
-Almost all the time is used on fetching data, so the performance depends on network speed.<br/>
+Almost all the time is used on fetching data, so the performance highly depends on network speed.<br/>
 A as test result on Oracle database in guest virtual machine, to generate 2.15 millions records into a file with 750 MB size, only takes external 3 seconds on writing, total time cost is 25 seconds.<br/>
 
 [drag]:https://raw.githubusercontent.com/hyee/OpenCSV/master/test/sshot.png
