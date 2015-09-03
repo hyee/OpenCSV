@@ -102,13 +102,6 @@ public class ResultSetHelperService {
                 case -102:
                     value = "timestamptz";
                     break;
-                case Types.BLOB:
-                    value = "blob";
-                    break;
-                case Types.NCLOB:
-                case Types.CLOB:
-                    value = "clob";
-                    break;
                 case Types.BINARY:
                 case Types.VARBINARY:
                 case Types.LONGVARBINARY:
@@ -178,6 +171,16 @@ public class ResultSetHelperService {
                 case "raw":
                     o = rs.getString(i + 1);
                     break;
+                case "blob":
+                    Blob bl = rs.getBlob(i + 1);
+                    o = DatatypeConverter.printHexBinary(bl.getBytes(1, (int) bl.length()));
+                    bl.free();
+                    break;
+                case "clob":
+                    Clob c = rs.getClob(i + 1);
+                    o = c.getSubString(1, (int) c.length());
+                    c.free();
+                    break;
                 default:
                     o = rs.getObject(i + 1);
             }
@@ -239,12 +242,12 @@ public class ResultSetHelperService {
             case "blob":
                 Blob bl = (Blob) o;
                 str = DatatypeConverter.printHexBinary(bl.getBytes(1, (int) bl.length()));
-                bl.free();
+                //bl.free();
                 break;
             case "clob":
                 Clob c = (Clob) o;
                 str = c.getSubString(1, (int) c.length());
-                c.free();
+                //c.free();
                 break;
             case "date":
             case "time":
