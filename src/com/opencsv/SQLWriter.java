@@ -36,9 +36,9 @@ public class SQLWriter extends CSVWriter {
         if (totalRows == 0) writeLog(0);
         add(columns);
         lineWidth = 2;
-        int flag=0;
-        for (int i = 0; i < Math.min(nextLine.length,this.columnTypes.length); i++) {
-            if(this.columnTypes[i]==null) continue;
+        int flag = 0;
+        for (int i = 0; i < Math.min(nextLine.length, this.columnTypes.length); i++) {
+            if (this.columnTypes[i] == null) continue;
             if (flag != 0) add(separator);
             ++flag;
             if (lineWidth > maxLineWidth) {
@@ -78,14 +78,14 @@ public class SQLWriter extends CSVWriter {
         resultService = new ResultSetHelperService(rs);
     }
 
-    public int writeAll2SQL(ResultSet rs) throws SQLException, IOException, InterruptedException {
+    public int writeAll2SQL(ResultSet rs) throws Exception {
         return writeAll2SQL(rs, "", 9999);
     }
 
-    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws SQLException, IOException, InterruptedException {
+    public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws Exception {
         resultService = new ResultSetHelperService(rs);
         init(resultService.columnNames, headerEncloser, maxLineWidth);
-        this.columnTypes=resultService.columnTypes;
+        this.columnTypes = resultService.columnTypes;
         if (asyncMode) {
             resultService.startAsyncFetch(new RowCallback() {
                 @Override
@@ -121,23 +121,23 @@ public class SQLWriter extends CSVWriter {
         String types[] = new String[array.length];
         for (int i = 0; i < array.length; i++) types[i] = "string";
         if (resultService != null && resultService.columnNames != null) {
-            ArrayList<String> cols=new ArrayList<String>();
+            ArrayList<String> cols = new ArrayList<String>();
             for (int j = 0; j < array.length; j++) {
-                boolean match=false;
+                boolean match = false;
                 for (int i = 0; i < resultService.columnNames.length; i++)
                     if (resultService.columnNames[i].equalsIgnoreCase(array[j].trim())) {
                         array[j] = resultService.columnNames[i];
                         types[j] = resultService.columnTypes[i];
                         cols.add(resultService.columnNames[i]);
-                        match=true;
+                        match = true;
                     }
-                if(!match) types[j] =null;
+                if (!match) types[j] = null;
             }
-            createOracleCtlFileFromHeaders(CSVFileName, array, types,reader.getParser().getQuotechar(), reader.seprator,"\\r\\n");
-            array=cols.toArray(new String[cols.size()]);
+            createOracleCtlFileFromHeaders(CSVFileName, array, types, reader.getParser().getQuotechar(), reader.seprator, "\\r\\n");
+            array = cols.toArray(new String[cols.size()]);
         }
         init(array, headerEncloser, maxLineWidth);
-        this.columnTypes=types;
+        this.columnTypes = types;
         while ((array = reader.readNext()) != null) {
             writeNextRow(array);
         }

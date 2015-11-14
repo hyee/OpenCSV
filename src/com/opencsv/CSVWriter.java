@@ -245,7 +245,7 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws SQLException, IOException, InterruptedException {
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws Exception {
         return writeAll(rs, includeColumnNames, true);
     }
 
@@ -260,12 +260,12 @@ public class CSVWriter implements Closeable {
      * @throws java.io.IOException   thrown by getColumnValue
      * @throws java.sql.SQLException thrown by getColumnValue
      */
-    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws SQLException, IOException, InterruptedException {
+    public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws Exception {
         resultService = new ResultSetHelperService(rs);
         if (includeColumnNames) {
             writeColumnNames();
             if (CSVFileName != null)
-                createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames,resultService.columnTypes, quotechar, separator,null);
+                createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, resultService.columnTypes, quotechar, separator, null);
         }
 
         if (asyncMode) {
@@ -386,7 +386,7 @@ public class CSVWriter implements Closeable {
         System.runFinalization();
     }
 
-    public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, String[] types,char encloser, char seperator, String rowSep) throws IOException {
+    public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, String[] types, char encloser, char seperator, String rowSep) throws IOException {
         File file = new File(CSVFileName);
         String FileName = file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".ctl";
         String ColName;
@@ -394,7 +394,7 @@ public class CSVWriter implements Closeable {
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
         b.append("INFILE      ").append(buffer.fileName).append(".csv");
-        if(rowSep!=null) b.append(" \"STR '"+rowSep+"'\"\n");
+        if (rowSep != null) b.append(" \"STR '" + rowSep + "'\"\n");
         b.append("BADFILE     ").append(buffer.fileName).append(".bad").append("\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc").append("\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
@@ -403,11 +403,10 @@ public class CSVWriter implements Closeable {
             if (i > 0) b.append(",\n");
             ColName = '"' + titles[i] + '"';
             b.append("    ").append(String.format("%-32s", ColName));
-            if(types[i]==null) b.append("FILLER");
+            if (types[i] == null) b.append("FILLER");
             else {
                 if (types[i].equalsIgnoreCase("date")) b.append("DATE \"YYYY-MM-DD HH24:MI:SS\" ");
-                else if (types[i].equalsIgnoreCase("timestamp"))
-                    b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
+                else if (types[i].equalsIgnoreCase("timestamp")) b.append("TIMESTAMP \"YYYY-MM-DD HH24:MI:SSXFF\" ");
                 else if (types[i].equalsIgnoreCase("timestamptz"))
                     b.append("TIMESTAMP WITH TIME ZONE \"YYYY-MM-DD HH24:MI:SSXFF TZH\" ");
                 b.append(String.format("NULLIF %s=BLANKS", ColName));
