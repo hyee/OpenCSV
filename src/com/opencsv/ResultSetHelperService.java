@@ -275,8 +275,9 @@ public class ResultSetHelperService {
     public void startAsyncFetch(final RowCallback c, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
         if (fetchRows < 0) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         else {
-            queue = new ArrayBlockingQueue<>(fetchRows + 10);
-            rs.setFetchSize(fetchRows * 2 / 3);
+            queue = new ArrayBlockingQueue<>(fetchRows);
+            rs.setFetchSize(fetchRows);
+            rs.getStatement().setMaxRows(fetchRows);
         }
         Thread t = new Thread(new Runnable() {
             @Override
