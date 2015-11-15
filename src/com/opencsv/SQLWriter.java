@@ -31,7 +31,7 @@ public class SQLWriter extends CSVWriter {
         maxLineWidth = width;
     }
 
-    public void writeNextRow(String[] nextLine) throws IOException {
+    public void writeNextRow(Object[] nextLine) throws IOException {
         if (nextLine == null) return;
         if (totalRows == 0) writeLog(0);
         add(columns);
@@ -45,7 +45,7 @@ public class SQLWriter extends CSVWriter {
                 add(lineEnd).add("    ");
                 lineWidth = 4;
             }
-            String nextElement = nextLine[i];
+            String nextElement = (String)nextLine[i];
             Boolean isString = !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean") && !nextElement.equals("");
 
             if (isString) {
@@ -89,12 +89,12 @@ public class SQLWriter extends CSVWriter {
         if (asyncMode) {
             resultService.startAsyncFetch(new RowCallback() {
                 @Override
-                public void execute(String[] row) throws Exception {
+                public void execute(Object[] row) throws Exception {
                     writeNextRow(row);
                 }
             });
         } else {
-            String[] values;
+            Object[] values;
             while ((values = resultService.getColumnValues()) != null) writeNextRow(values);
         }
         close();

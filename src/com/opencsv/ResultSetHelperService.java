@@ -166,7 +166,7 @@ public class ResultSetHelperService {
      */
     public String[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         long sec = System.nanoTime();
-        if (rs.isClosed()|| !rs.next()) {
+        if (!rs.next()) {
             rs.close();
             isFinished = true;
             return null;
@@ -182,26 +182,23 @@ public class ResultSetHelperService {
                     break;
                 case "blob":
                     Blob bl = rs.getBlob(i + 1);
-                    if(bl!=null) {
+                    if (bl != null) {
                         o = DatatypeConverter.printHexBinary(bl.getBytes(1, (int) bl.length()));
                         bl.free();
-                    }
-                    else o=null;
+                    } else o = null;
                     break;
                 case "clob":
                     Clob c = rs.getClob(i + 1);
-                    if(c!=null) {
+                    if (c != null) {
                         o = c.getSubString(1, (int) c.length());
                         c.free();
-                    }
-                    else o=null;
+                    } else o = null;
                     break;
                 default:
                     o = rs.getObject(i + 1);
             }
-            try {
-                if (o != null && rs.wasNull()) o = null;
-            } catch (Exception e) {return null;}
+            if (o != null && rs.wasNull()) o = null;
+
             if (queue == null)
                 rowValue[i] = getColumnValue(o, columnTypes[i], trim, dateFormatString, timeFormatString);
             else rowObject[i] = o;
@@ -279,7 +276,7 @@ public class ResultSetHelperService {
         if (fetchRows < 0) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         else {
             queue = new ArrayBlockingQueue<>(fetchRows + 10);
-            rs.setFetchSize(fetchRows*2/3);
+            rs.setFetchSize(fetchRows * 2 / 3);
         }
         Thread t = new Thread(new Runnable() {
             @Override
@@ -288,7 +285,7 @@ public class ResultSetHelperService {
                     while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
                         queue.put(getColumnValues() == null ? EOF : rowObject);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    if(e.getMessage().toLowerCase().indexOf("closed")==-1) e.printStackTrace();
                 }
             }
         });
@@ -300,20 +297,20 @@ public class ResultSetHelperService {
         int count = 0;
         while ((values = queue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
             for (int i = 0; i < columnCount; i++)
-                rowValue[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
-            c.execute(rowValue);
+                values[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
+            c.execute(values);
         }
         queue = null;
         t.join();
     }
 
-    public ArrayList<String[]> fetchRows(int rows) throws Exception {
-        final ArrayList<String[]> ary = new ArrayList();
+    public ArrayList<Object[]> fetchRows(int rows) throws Exception {
+        final ArrayList<Object[]> ary = new ArrayList();
         //ary.add(columnNames);
         startAsyncFetch(new RowCallback() {
             @Override
-            public void execute(String[] row) throws Exception {
-                ary.add(row.clone());
+            public void execute(Object[] row) throws Exception {
+                ary.add(row);
             }
         }, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
         return ary;

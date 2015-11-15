@@ -271,7 +271,7 @@ public class CSVWriter implements Closeable {
         if (asyncMode) {
             resultService.startAsyncFetch(new RowCallback() {
                 @Override
-                public void execute(String[] row) throws Exception {
+                public void execute(Object[] row) throws Exception {
                     writeNext(row);
                 }
             });
@@ -296,7 +296,7 @@ public class CSVWriter implements Closeable {
      * @param applyQuotesToAll true if all values are to be quoted.  false applies quotes only
      *                         to values which contain the separator, escape, quote or new line characters.
      */
-    public void writeNext(String[] nextLine, boolean applyQuotesToAll) throws IOException {
+    public void writeNext(Object[] nextLine, boolean applyQuotesToAll) throws IOException {
         if (nextLine == null) {
             return;
         }
@@ -306,7 +306,7 @@ public class CSVWriter implements Closeable {
             if (i != 0) {
                 add(separator);
             }
-            String nextElement = nextLine[i];
+            String nextElement = (String)nextLine[i];
             Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
             if ((applyQuotesToAll || stringContainsSpecialCharacters) && quotechar != NO_QUOTE_CHARACTER) {
                 add(quotechar);
@@ -333,7 +333,7 @@ public class CSVWriter implements Closeable {
      * @param nextLine a string array with each comma-separated element as a separate
      *                 entry.
      */
-    public void writeNext(String[] nextLine) throws IOException {
+    public void writeNext(Object[] nextLine) throws IOException {
         writeNext(nextLine, false);
     }
 
