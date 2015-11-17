@@ -175,6 +175,7 @@ public class ResultSetHelperService {
         for (int i = 0; i < columnCount; i++) {
             switch (columnTypes[i]) {
                 case "timestamptz":
+                case "timestamp":
                     o = rs.getTimestamp(i + 1);
                     break;
                 case "raw":
@@ -278,6 +279,7 @@ public class ResultSetHelperService {
             queue = new ArrayBlockingQueue<>(fetchRows);
             rs.setFetchSize(fetchRows);
             rs.getStatement().setMaxRows(fetchRows);
+
         }
         Thread t = new Thread(new Runnable() {
             @Override
