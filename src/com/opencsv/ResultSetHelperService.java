@@ -279,7 +279,6 @@ public class ResultSetHelperService {
             queue = new ArrayBlockingQueue<>(fetchRows);
             rs.setFetchSize(fetchRows);
             rs.getStatement().setMaxRows(fetchRows);
-
         }
         Thread t = new Thread(new Runnable() {
             @Override
@@ -288,6 +287,9 @@ public class ResultSetHelperService {
                     while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
                         queue.put(getColumnValues() == null ? EOF : rowObject);
                 } catch (Exception e) {
+                    try {
+                        if(queue != null) queue.put(EOF);
+                    } catch (Exception e1) {}
                     if(e.getMessage().toLowerCase().indexOf("closed")==-1) e.printStackTrace();
                 }
             }
