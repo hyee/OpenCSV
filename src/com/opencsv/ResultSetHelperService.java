@@ -229,16 +229,21 @@ public class ResultSetHelperService {
     }
 
     protected String handleTimestamp(Timestamp timestamp, String timestampFormatString) {
+        String result=null;
         if (timeFormat == null) {
             DEFAULT_TIMESTAMP_FORMAT = timestampFormatString;
             timeFormat = new SimpleDateFormat(timestampFormatString);
         }
-        return timestamp == null ? null : timeFormat.format(timestamp);
+        if(timestamp !=null ) {
+            result =timeFormat.format(timestamp);
+            if(result.endsWith(".0")) result=result.substring(0,result.length()-2);
+        }
+        return result;
     }
 
     protected String handleTimestampTZ(Timestamp timestamp, String timestampFormatString) {
         if (timeFormat == null) {
-            timeTZFormat = new SimpleDateFormat(timestampFormatString + " S");
+            timeTZFormat = new SimpleDateFormat(timestampFormatString + " X");
         }
         return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
