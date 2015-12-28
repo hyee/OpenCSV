@@ -242,7 +242,7 @@ public class ResultSetHelperService {
     }
 
     protected String handleTimestampTZ(Timestamp timestamp, String timestampFormatString) {
-        if (timeFormat == null) {
+        if (timeTZFormat == null) {
             timeTZFormat = new SimpleDateFormat(timestampFormatString + " X");
         }
         return timestamp == null ? null : timeTZFormat.format(timestamp);
