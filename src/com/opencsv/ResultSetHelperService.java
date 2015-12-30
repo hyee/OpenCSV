@@ -291,6 +291,7 @@ public class ResultSetHelperService {
                 try {
                     while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
                         queue.put(getColumnValues() == null ? EOF : rowObject);
+                } catch (NullPointerException e0) {
                 } catch (Exception e) {
                     try {
                         if(queue != null) queue.put(EOF);
