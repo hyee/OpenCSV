@@ -249,7 +249,7 @@ public class ResultSetHelperService {
     }
 
     private String getColumnValue(Object o, String colType, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
-        if (o == null) return "";
+        if (o == null) return null;
         String str;
         switch (colType) {
             case "object":

@@ -45,8 +45,8 @@ public class SQLWriter extends CSVWriter {
                 add(lineEnd).add("    ");
                 lineWidth = 4;
             }
-            String nextElement = (String)nextLine[i];
-            Boolean isString = !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean") && !nextElement.equals("");
+            String nextElement = nextLine[i]==null?null:(String)nextLine[i];
+            Boolean isString = nextElement!=null&&!this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean") && !nextElement.equals("");
 
             if (isString) {
                 add(quotechar);
@@ -54,7 +54,7 @@ public class SQLWriter extends CSVWriter {
                 else add(nextElement);
                 add(quotechar);
             } else {
-                add(nextElement.equals("") ? "null" : nextElement);
+                add(nextElement==null ? "null" : nextElement);
             }
         }
         add(");").add(lineEnd);

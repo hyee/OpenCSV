@@ -306,7 +306,7 @@ public class CSVWriter implements Closeable {
             if (i != 0) {
                 add(separator);
             }
-            String nextElement = (String)nextLine[i];
+            String nextElement =nextLine[i]==null?"":(String)nextLine[i];
             Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
             if ((applyQuotesToAll || stringContainsSpecialCharacters) && quotechar != NO_QUOTE_CHARACTER) {
                 add(quotechar);
