@@ -26,6 +26,7 @@ Requires JRE 1.7+.
     }
     
     //Extract ResultSet to SQL file, returns number of records extracted
+    //Parameter "header" defines the extract information to be appended into the file, can be ""
     public int ResultSet2SQL(final ResultSet rs, final String fileName, final String header, final boolean aync) throws Exception {
         try (SQLWriter writer = new SQLWriter(fileName)) {
             //Define the max line width(default as 1500), which determines if split the SQL stmt as cross-lines
@@ -46,7 +47,7 @@ Requires JRE 1.7+.
     }
     
     //Fetch ResultSet into string array, be noted that the cell value can be null
-    //Parameter rows means the number of records to be extracted, -1 means unlimited
+    //Parameter "rows" means the number of records to be extracted, -1 means unlimited
     public Object[][] fetchResult(final ResultSet rs, final int rows) throws Exception {
         if (rs.getStatement().isClosed() || rs.isClosed()) throw CancelError;
         setCurrentResultSet(rs);
