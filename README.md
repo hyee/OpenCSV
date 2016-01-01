@@ -4,7 +4,7 @@ Requires JRE 1.7+.
 
 # Additional Features
     - Performance and memory optimization by NIO, buffering and the reduction of object creations
-    - Convert ResultSet to CSV file, refer to CSVWriter.writeAll2SQL(<Resuleset>,...) 
+    - Convert ResultSet to CSV file, refer to CSVWriter.writeAll(<Resuleset>,...) 
     - Convert ResultSet to SQL file, refer to SQLWriter.writeAll2SQL(<Resuleset>,...) 
     - Convert CSV file to SQL file,  refer to SQLWriter.writeAll2SQL(<CSVFilePath>,...)
     - Convert ResultSet/CSV to Oracle SQL*Loader Files(Automatically)
