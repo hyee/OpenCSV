@@ -46,6 +46,7 @@ Requires JRE 1.7+.
     }
     
     //Fetch ResultSet into string array, be noted that the cell value can be null
+    //Parameter rows means the number of records to be extracted, -1 means unlimited
     public Object[][] fetchResult(final ResultSet rs, final int rows) throws Exception {
         if (rs.getStatement().isClosed() || rs.isClosed()) throw CancelError;
         setCurrentResultSet(rs);
