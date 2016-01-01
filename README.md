@@ -14,6 +14,7 @@ Requires JRE 1.7+.
 # Sample of use
 
     //Extract ResultSet to CSV file, auto-compress if the fileName extension is ".zip" or ".gz"
+    //Returns number of records extracted
     public int ResultSet2CSV(final ResultSet rs, final String fileName, final String header, final boolean aync) throws Exception {
         try (CSVWriter writer = new CSVWriter(fileName)) {
             //Define fetch size(default as 30000 rows), higher to be faster performance but takes more memory
@@ -24,7 +25,7 @@ Requires JRE 1.7+.
         }
     }
     
-    //Extract ResultSet to SQL file
+    //Extract ResultSet to SQL file, returns number of records extracted
     public int ResultSet2SQL(final ResultSet rs, final String fileName, final String header, final boolean aync) throws Exception {
         try (SQLWriter writer = new SQLWriter(fileName)) {
             //Define the max line width(default as 1500), which determines if split the SQL stmt as cross-lines
@@ -36,7 +37,7 @@ Requires JRE 1.7+.
         }
     }
     
-    //Convert CSV file to SQL file
+    //Convert CSV file to SQL file, returns number of records extracted
     public int CSV2SQL(final ResultSet rs, final String SQLFileName, final String CSVfileName, final String header) throws Exception {
         try (SQLWriter writer = new SQLWriter(SQLFileName)) {
             writer.setFileHead(header);
