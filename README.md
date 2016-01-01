@@ -19,6 +19,8 @@ Requires JRE 1.7+.
         try (CSVWriter writer = new CSVWriter(fileName)) {
             //Define fetch size(default as 30000 rows), higher to be faster performance but takes more memory
             ResultSetHelperService.RESULT_FETCH_SIZE=10000;
+            //Define MAX extract rows, -1 means unlimited.
+            ResultSetHelperService.MAX_FETCH_ROWS=20000;
             writer.setAsyncMode(aync);
             int result = writer.writeAll(rs, true);
             return result - 1;

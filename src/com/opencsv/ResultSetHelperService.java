@@ -31,6 +31,7 @@ public class ResultSetHelperService {
     // These types don't exist in Java 5
 
     public static int RESULT_FETCH_SIZE = 30000;
+    public static int MAX_FETCH_ROWS = -1;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
     public int columnCount;
@@ -329,7 +330,7 @@ public class ResultSetHelperService {
     }
 
     public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
-        startAsyncFetch(c, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, -1);
+        startAsyncFetch(c, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, MAX_FETCH_ROWS);
     }
 
     public void startAsyncFetch(final RowCallback c) throws Exception {
