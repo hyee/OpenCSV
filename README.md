@@ -11,7 +11,7 @@ Requires JRE 1.7+.
     - Support automatically compression if destination file extension is ".zip" or ".gz"
     - Support Multi-threads processing to speed up performance, refer to CSVWriter.setAsyncMode(boolean) 
     
-# Sample of use
+# Examples
 
     //Extract ResultSet to CSV file, auto-compress if the fileName extension is ".zip" or ".gz"
     //Returns number of records extracted
