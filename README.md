@@ -44,7 +44,7 @@ Requires JRE 1.7+.
         }
     }
     
-    //Fetch ResultSet into string array, note that the cell value can be null
+    //Fetch ResultSet into string array, be noted that the cell value can be null
     public Object[][] fetchResult(final ResultSet rs, final int rows) throws Exception {
         if (rs.getStatement().isClosed() || rs.isClosed()) throw CancelError;
         setCurrentResultSet(rs);
