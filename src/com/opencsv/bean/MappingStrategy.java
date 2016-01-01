@@ -2,19 +2,19 @@ package com.opencsv.bean;
 
 
 /**
- Copyright 2007 Kyle Miller.
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ * Copyright 2007 Kyle Miller.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import com.opencsv.CSVReader;
@@ -39,6 +39,15 @@ public interface MappingStrategy<T> {
      * @throws IntrospectionException - thrown on error loading the property descriptors.
      */
     PropertyDescriptor findDescriptor(int col) throws IntrospectionException;
+
+    /**
+     * Implementation will have to return - based on the current column - a BeanField containing
+     * the {@link java.lang.reflect.Field} and a boolean representing whether the field is required (mandatory) or not.
+     *
+     * @param col the column to find the field for
+     * @return BeanField containing Field and whether it is required
+     */
+    BeanField findField(int col);
 
     /**
      * Implementation will return a bean of the type of object you are mapping.
@@ -67,4 +76,11 @@ public interface MappingStrategy<T> {
      * @return the column index, or null if the name doesn't exist
      */
     Integer getColumnIndex(String name);
+
+    /**
+     * Determines whether the mapping strategy is driven by {@link com.opencsv.bean.CsvBind} annotations.
+     *
+     * @return whether the mapping strategy is driven by annotations
+     */
+    boolean isAnnotationDriven();
 }

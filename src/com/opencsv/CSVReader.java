@@ -1,19 +1,19 @@
 package com.opencsv;
 
 /**
- Copyright 2005 Bytecode Pty Ltd.
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ * Copyright 2005 Bytecode Pty Ltd.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import com.opencsv.stream.reader.LineReader;
@@ -35,10 +35,12 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
     public static final boolean DEFAULT_KEEP_CR = false;
     public static final boolean DEFAULT_VERIFY_READER = true;
+
     /**
      * The default line to start reading.
      */
     public static final int DEFAULT_SKIP_LINES = 0;
+    public static final int READ_AHEAD_LIMIT = Character.SIZE / Byte.SIZE;
     public char seprator;
     private CSVParser parser;
     private int skipLines;
@@ -48,6 +50,9 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     private boolean linesSkiped;
     private boolean keepCR;
     private boolean verifyReader;
+
+    private long linesRead = 0;
+    private long recordsRead = 0;
 
     /**
      * Constructs CSVReader using a comma for the separator.
@@ -189,11 +194,11 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     /**
      * Constructs CSVReader with supplied CSVParser.
      *
-     * @param reader       the reader to an underlying CSV source.
-     * @param line         the line number to skip for start reading
-     * @param csvParser    the parser to use to parse input
-     * @param keepCR       true to keep carriage returns in data read, false otherwise
-     * @param verifyReader true to verify reader before each read, false otherwise
+     * @param reader    the reader to an underlying CSV source.
+     * @param line      the line number to skip for start reading
+     * @param csvParser the parser to use to parse input
+     * @param keepCR    true to keep carriage returns in data read, false otherwise
+     * @param verifyReader   true to verify reader before each read, false otherwise
      */
     CSVReader(Reader reader, int line, CSVParser csvParser, boolean keepCR, boolean verifyReader) {
         this.br = (reader instanceof BufferedReader ? (BufferedReader) reader : new BufferedReader(reader));
@@ -201,8 +206,8 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         this.skipLines = line;
         this.parser = csvParser;
         this.keepCR = keepCR;
-        this.verifyReader = verifyReader;
         this.seprator = csvParser.getSeparator();
+        this.verifyReader = verifyReader;
     }
 
     /**
@@ -241,7 +246,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      */
     public List<String[]> readAll() throws IOException {
 
-        List<String[]> allElements = new ArrayList();
+        List<String[]> allElements = new ArrayList<String[]>();
         while (hasNext) {
             String[] nextLineAsTokens = readNext();
             if (nextLineAsTokens != null) {
@@ -265,7 +270,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         do {
             String nextLine = getNextLine();
             if (!hasNext) {
-                return result; // should throw if still pending?
+                return validateResult(result);
             }
             String[] r = parser.parseLineMulti(nextLine);
             if (r.length > 0) {
@@ -276,13 +281,19 @@ public class CSVReader implements Closeable, Iterable<String[]> {
                 }
             }
         } while (parser.isPending());
+        return validateResult(result);
+    }
+
+    private String[] validateResult(String[] result) {
+        if (result != null) {
+            recordsRead++;
+        }
         return result;
     }
 
     /**
      * For multi line records this method combines the current result with the result from previous read(s).
-     *
-     * @param buffer   - previous data read for this record
+     * @param buffer - previous data read for this record
      * @param lastRead - latest data read for this record.
      * @return String array with union of the buffer and lastRead arrays.
      */
@@ -308,19 +319,22 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         if (!this.linesSkiped) {
             for (int i = 0; i < skipLines; i++) {
                 lineReader.readLine();
+                linesRead++;
             }
             this.linesSkiped = true;
         }
         String nextLine = lineReader.readLine();
         if (nextLine == null) {
             hasNext = false;
+        } else {
+            linesRead++;
         }
+
         return hasNext ? nextLine : null;
     }
 
     /**
      * Checks to see if the file is closed.
-     *
      * @return true if the reader can no longer be read from.
      */
     private boolean isClosed() {
@@ -328,7 +342,10 @@ public class CSVReader implements Closeable, Iterable<String[]> {
             return false;
         }
         try {
-            return !br.ready();
+            br.mark(READ_AHEAD_LIMIT);
+            int nextByte = br.read();
+            br.reset(); // resets stream position, possible because its buffered
+            return nextByte == -1; // read() returns -1 at end of stream
         } catch (IOException e) {
             return true;
         }
@@ -345,7 +362,6 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
     /**
      * Creates an Iterator for processing the csv data.
-     *
      * @return an String[] iterator.
      */
     public Iterator<String[]> iterator() {
@@ -369,8 +385,83 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      *
      * @return true if CSVReader will verify the reader before reads.  False otherwise.
      * @link https://sourceforge.net/p/opencsv/bugs/108/
+     * @since 3.3
      */
     public boolean verifyReader() {
         return this.verifyReader;
+    }
+
+    /**
+     * Used for debugging purposes this method returns the number of lines that has been read from
+     * the reader passed into the CSVReader.
+     * <p/>
+     * Given the following data.
+     * <code>
+     * <pre>
+     * First line in the file
+     * some other descriptive line
+     * a,b,c
+     *
+     * a,"b\nb",c
+     * </pre>
+     * </code>
+     * With a CSVReader constructed like so
+     * <code>
+     * <pre>
+     * CSVReader c = builder.withCSVParser(new CSVParser())
+     *                      .withSkipLines(2)
+     *                      .build();
+     * </pre>
+     * </code>
+     * The initial call to getLinesRead will be 0.<br>
+     * After the first call to readNext() then getLinesRead will return 3 (because header was read).<br>
+     * After the second call to read the blank line then getLinesRead will return 4 (still a read).<br>
+     * After third call to readNext getLinesRead will return 6 because it took two line reads to retrieve this record.<br>
+     * Subsequent calls to readNext (since we are out of data) will not increment the number of lines read.<br>
+     * <p/>
+     * An example of this is in the linesAndRecordsRead() test in CSVReaderTest.
+     *
+     * @return the number of lines read by the reader (including skip lines).
+     * @link https://sourceforge.net/p/opencsv/feature-requests/73/
+     * @since 3.6
+     */
+    public long getLinesRead() {
+        return linesRead;
+    }
+
+    /**
+     * Used for debugging purposes this method returns the number of records that has been read from
+     * the CSVReader.
+     * <p/>
+     * Given the following data.
+     * <code><pre>
+     * First line in the file
+     * some other descriptive line
+     * a,b,c
+     * <p/>
+     * a,"b\nb",c
+     * </pre></code>
+     * With a CSVReader constructed like so
+     * <code><pre>
+     * CSVReader c = builder.withCSVParser(new CSVParser())
+     *                      .withSkipLines(2)
+     *                      .build();
+     * </pre></code>
+     * The initial call to getRecordsRead will be 0.<br>
+     * After the first call to readNext() then getRecordsRead will return 1.<br>
+     * After the second call to read the blank line then getRecordsRead will return 2
+     * (a blank line is considered a record with one empty field).<br>
+     * After third call to readNext getRecordsRead will return 3 because even though
+     * reads to retrieve this record it is still a single record read.<br>
+     * Subsequent calls to readNext (since we are out of data) will not increment the number of records read.<br>
+     * <p/>
+     * An example of this is in the linesAndRecordsRead() test in CSVReaderTest.
+     *
+     * @return the number of records (Array of Strings[]) read by the reader.
+     * @link https://sourceforge.net/p/opencsv/feature-requests/73/
+     * @since 3.6
+     */
+    public long getRecordsRead() {
+        return recordsRead;
     }
 }

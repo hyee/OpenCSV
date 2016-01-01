@@ -1,5 +1,5 @@
 # OpenCSV
-Based on OpenCSV on http://opencsv.sourceforge.net, please visit the address for its original usage.
+Based on OpenCSV(3.6) on http://opencsv.sourceforge.net, please visit the address for its original usage.
 Requires JRE 1.7+.
 
 # Features

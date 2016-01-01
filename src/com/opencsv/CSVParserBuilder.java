@@ -1,24 +1,26 @@
 /**
- Copyright 2005 Bytecode Pty Ltd.
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ * Copyright 2005 Bytecode Pty Ltd.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package com.opencsv;
 
 
+import com.opencsv.enums.CSVReaderNullFieldIndicator;
+
 /**
  * Builder for creating a CSVParser.
- * <p/>
+ *
  * <code>
  * final CSVParser parser =
  * new CSVParserBuilder()
@@ -37,6 +39,7 @@ public class CSVParserBuilder {
     private boolean strictQuotes = CSVParser.DEFAULT_STRICT_QUOTES;
     private boolean ignoreLeadingWhiteSpace = CSVParser.DEFAULT_IGNORE_LEADING_WHITESPACE;
     private boolean ignoreQuotations = CSVParser.DEFAULT_IGNORE_QUOTATIONS;
+    private CSVReaderNullFieldIndicator nullFieldIndicator = CSVReaderNullFieldIndicator.NEITHER;
 
     /**
      * Default constructor.
@@ -117,11 +120,10 @@ public class CSVParserBuilder {
 
     /**
      * Constructs CSVParser.
-     *
      * @return a new CSVParser with defined settings.
      */
     public CSVParser build() {
-        return new CSVParser(separator, quoteChar, escapeChar, strictQuotes, ignoreLeadingWhiteSpace, ignoreQuotations);
+        return new CSVParser(separator, quoteChar, escapeChar, strictQuotes, ignoreLeadingWhiteSpace, ignoreQuotations, nullFieldIndicator);
     }
 
     /**
@@ -164,5 +166,23 @@ public class CSVParserBuilder {
      */
     public boolean isIgnoreQuotations() {
         return ignoreQuotations;
+    }
+
+    /**
+     * Sets the NullFieldIndicator.
+     *
+     * @param fieldIndicator - CSVReaderNullFieldIndicator set to what should be considered a null field.
+     * @return - The CSVParserBuilder
+     */
+    public CSVParserBuilder withFieldAsNull(final CSVReaderNullFieldIndicator fieldIndicator) {
+        this.nullFieldIndicator = fieldIndicator;
+        return this;
+    }
+
+    /**
+     * @return - the null field indicator.
+     */
+    public CSVReaderNullFieldIndicator nullFieldIndicator() {
+        return nullFieldIndicator;
     }
 }

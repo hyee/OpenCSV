@@ -1,19 +1,19 @@
 package com.opencsv.bean;
 
 /**
- Copyright 2007 Kyle Miller.
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ * Copyright 2007 Kyle Miller.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import com.opencsv.CSVReader;
@@ -24,17 +24,14 @@ import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
 import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Converts CSV data to objects.
  *
  * @param <T> - class to convert the objects to.
  */
-public class CsvToBean<T> {
+public class CsvToBean<T> extends AbstractCSVToBean {
     private Map<Class<?>, PropertyEditor> editorMap = null;
 
     /**
@@ -45,7 +42,6 @@ public class CsvToBean<T> {
 
     /**
      * parse the values from a csvReader constructed from the passed in Reader.
-     *
      * @param mapper - mapping strategy for the bean.
      * @param reader - Reader used to construct a CSVReader
      * @return List of Objects.
@@ -57,7 +53,6 @@ public class CsvToBean<T> {
 
     /**
      * parse the values from a csvReader constructed from the passed in Reader.
-     *
      * @param mapper - mapping strategy for the bean.
      * @param reader - Reader used to construct a CSVReader
      * @param filter - CsvToBeanFilter to apply - null if no filter.
@@ -69,9 +64,8 @@ public class CsvToBean<T> {
 
     /**
      * parse the values from the csvReader.
-     *
      * @param mapper - mapping strategy for the bean.
-     * @param csv    - CSVReader
+     * @param csv - CSVReader
      * @return List of Objects.
      */
     public List<T> parse(MappingStrategy<T> mapper, CSVReader csv) {
@@ -80,23 +74,30 @@ public class CsvToBean<T> {
 
     /**
      * parse the values from the csvReader.
-     *
      * @param mapper - mapping strategy for the bean.
-     * @param csv    - CSVReader
+     * @param csv - CSVReader
      * @param filter - CsvToBeanFilter to apply - null if no filter.
      * @return List of Objects.
      */
     public List<T> parse(MappingStrategy<T> mapper, CSVReader csv, CsvToBeanFilter filter) {
+        long lineProcessed = 0;
+        String[] line = null;
+
         try {
             mapper.captureHeader(csv);
-            String[] line;
+        } catch (Exception e) {
+            throw new RuntimeException("Error capturing CSV header!", e);
+        }
+
+        try {
             List<T> list = new ArrayList<T>();
             while (null != (line = csv.readNext())) {
+                lineProcessed++;
                 processLine(mapper, filter, line, list);
             }
             return list;
         } catch (Exception e) {
-            throw new RuntimeException("Error parsing CSV!", e);
+            throw new RuntimeException("Error parsing CSV line: " + lineProcessed + " values: " + Arrays.toString(line), e);
         }
     }
 
@@ -109,58 +110,46 @@ public class CsvToBean<T> {
 
     /**
      * Creates a single object from a line from the csv file.
-     *
      * @param mapper - MappingStrategy
-     * @param line   - array of Strings from the csv file.
+     * @param line  - array of Strings from the csv file.
      * @return - object containing the values.
-     * @throws IllegalAccessException    - thrown on error creating bean.
+     * @throws IllegalAccessException - thrown on error creating bean.
      * @throws InvocationTargetException - thrown on error calling the setters.
-     * @throws InstantiationException    - thrown on error creating bean.
-     * @throws IntrospectionException    - thrown on error getting the PropertyDescriptor.
+     * @throws InstantiationException - thrown on error creating bean.
+     * @throws IntrospectionException - thrown on error getting the PropertyDescriptor.
      */
     protected T processLine(MappingStrategy<T> mapper, String[] line) throws IllegalAccessException, InvocationTargetException, InstantiationException, IntrospectionException {
         T bean = mapper.createBean();
         for (int col = 0; col < line.length; col++) {
-            PropertyDescriptor prop = mapper.findDescriptor(col);
-            if (null != prop) {
-                String value = checkForTrim(line[col], prop);
-                Object obj = convertValue(value, prop);
-                prop.getWriteMethod().invoke(bean, obj);
+            if (mapper.isAnnotationDriven()) {
+                processField(mapper, line, bean, col);
+            } else {
+                processProperty(mapper, line, bean, col);
             }
         }
         return bean;
     }
 
-    private String checkForTrim(String s, PropertyDescriptor prop) {
-        return trimmableProperty(prop) ? s.trim() : s;
-    }
-
-    private boolean trimmableProperty(PropertyDescriptor prop) {
-        return !prop.getPropertyType().getName().contains("String");
-    }
-
-    /**
-     * Convert a string value to its Object value.
-     *
-     * @param value - String value
-     * @param prop  - PropertyDescriptor
-     * @return The object set to value (i.e. Integer).  Will return String if no PropertyEditor is found.
-     * @throws InstantiationException - Thrown on error getting the property editor from the property descriptor.
-     * @throws IllegalAccessException - Thrown on error getting the property editor from the property descriptor.
-     */
-    protected Object convertValue(String value, PropertyDescriptor prop) throws InstantiationException, IllegalAccessException {
-        PropertyEditor editor = getPropertyEditor(prop);
-        Object obj = value;
-        if (null != editor) {
-            editor.setAsText(value);
-            obj = editor.getValue();
+    private void processProperty(MappingStrategy<T> mapper, String[] line, T bean, int col) throws IntrospectionException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        PropertyDescriptor prop = mapper.findDescriptor(col);
+        if (null != prop) {
+            String value = checkForTrim(line[col], prop);
+            Object obj = convertValue(value, prop);
+            prop.getWriteMethod().invoke(bean, obj);
         }
-        return obj;
+    }
+
+    private void processField(MappingStrategy<T> mapper, String[] line, T bean, int col) throws IllegalAccessException {
+        BeanField beanField = mapper.findField(col);
+        if (beanField != null) {
+            String value = line[col];
+            beanField.setFieldValue(bean, value);
+        }
     }
 
     private PropertyEditor getPropertyEditorValue(Class<?> cls) {
         if (editorMap == null) {
-            editorMap = new HashMap();
+            editorMap = new HashMap<Class<?>, PropertyEditor>();
         }
 
         PropertyEditor editor = editorMap.get(cls);
