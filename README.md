@@ -27,6 +27,7 @@ Requires JRE 1.7+.
     
     //Extract ResultSet to SQL file, returns number of records extracted
     //Parameter "header" defines the extract information to be appended into the file, can be ""
+    //Parameter "rs" can be null, which helps the engine identifying the column list and data types
     public int ResultSet2SQL(final ResultSet rs, final String fileName, final String header, final boolean aync) throws Exception {
         try (SQLWriter writer = new SQLWriter(fileName)) {
             //Define the max line width(default as 1500), which determines if split the SQL stmt as cross-lines
