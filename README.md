@@ -2,7 +2,7 @@
 Based on OpenCSV(3.6) on http://opencsv.sourceforge.net, please visit the address for its original usage.
 Requires JRE 1.7+.
 
-# Features
+# Additional Features
     - Performance and memory optimization by NIO, buffering and the reduction of object creations
     - Convert ResultSet to CSV file, refer to CSVWriter.writeAll2SQL(<Resuleset>,...) 
     - Convert ResultSet to SQL file, refer to SQLWriter.writeAll2SQL(<Resuleset>,...) 
