@@ -46,7 +46,7 @@ public class SQLWriter extends CSVWriter {
                 lineWidth = 4;
             }
             String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
-            Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean") && !nextElement.equals("");
+            Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean");
 
             if (isString) {
                 add(quotechar);
