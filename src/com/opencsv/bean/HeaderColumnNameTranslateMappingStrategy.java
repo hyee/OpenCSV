@@ -47,6 +47,7 @@ public class HeaderColumnNameTranslateMappingStrategy<T> extends HeaderColumnNam
 
     /**
      * retrieves the column mappings of the strategy.
+     *
      * @return - the column mappings of the strategy.
      */
     public Map<String, String> getColumnMapping() {
@@ -55,6 +56,7 @@ public class HeaderColumnNameTranslateMappingStrategy<T> extends HeaderColumnNam
 
     /**
      * Sets the column mapping to those passed in.
+     *
      * @param columnMapping - source column mapping.
      */
     public void setColumnMapping(Map<String, String> columnMapping) {

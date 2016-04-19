@@ -30,8 +30,8 @@ import java.util.List;
 /**
  * Allows to export Java beans content to a new CSV spreadsheet file.
  *
- * @author Kali &lt;kali.tystrit@gmail.com&gt;
  * @param <T> - Type of object that is being processed.
+ * @author Kali &lt;kali.tystrit@gmail.com&gt;
  */
 public class BeanToCsv<T> {
 
@@ -55,8 +55,9 @@ public class BeanToCsv<T> {
 
     /**
      * Writes all the objects, one at a time, to the csvWriter using the passed in Strategy.
-     * @param mapper - Mapping strategy for the bean.
-     * @param csv - CSVWriter
+     *
+     * @param mapper  - Mapping strategy for the bean.
+     * @param csv     - CSVWriter
      * @param objects - list of objects to write.
      * @return - false if there are no objects to process, true otherwise.
      */
@@ -77,14 +78,15 @@ public class BeanToCsv<T> {
 
     /**
      * Processes a list of objects.
-     * @param csv - csvWriter
+     *
+     * @param csv     - csvWriter
      * @param objects - list of objects to process
      * @param getters - list of getter methods to retrieve the data from the objects.
-     * @throws IntrospectionException -  thrown if there is an failure in Introspection.
-     * @throws IllegalAccessException -  thrown if there is an failure in Introspection.
+     * @throws IntrospectionException    -  thrown if there is an failure in Introspection.
+     * @throws IllegalAccessException    -  thrown if there is an failure in Introspection.
      * @throws InvocationTargetException -  thrown if there is an failure in Introspection.
      */
-    private void processAndWriteObjects(CSVWriter csv, List<?> objects, List<Method> getters) throws IOException,IntrospectionException, IllegalAccessException, InvocationTargetException {
+    private void processAndWriteObjects(CSVWriter csv, List<?> objects, List<Method> getters) throws IOException, IntrospectionException, IllegalAccessException, InvocationTargetException {
         for (Object obj : objects) {
             String[] line = processObject(getters, obj);
             csv.writeNext(line);
@@ -93,7 +95,8 @@ public class BeanToCsv<T> {
 
     /**
      * Processes the header for the bean.
-     * @param mapper  MappingStrategy for Bean
+     *
+     * @param mapper MappingStrategy for Bean
      * @return String array with header values.
      * @throws IntrospectionException -  thrown if there is an failure in Introspection.
      */
@@ -111,11 +114,12 @@ public class BeanToCsv<T> {
 
     /**
      * Retrieve all the information out of an object.
+     *
      * @param getters - List of methods to retrieve information.
-     * @param bean - object to get the information from.
+     * @param bean    - object to get the information from.
      * @return String array containing the information from the object
-     * @throws IntrospectionException - thrown by error in introspection.
-     * @throws IllegalAccessException - thrown by error in introspection.
+     * @throws IntrospectionException    - thrown by error in introspection.
+     * @throws IllegalAccessException    - thrown by error in introspection.
      * @throws InvocationTargetException - thrown by error in introspection.
      */
     protected String[] processObject(List<Method> getters, Object bean) throws IntrospectionException, IllegalAccessException, InvocationTargetException {
@@ -134,6 +138,7 @@ public class BeanToCsv<T> {
 
     /**
      * Build getters list from provided mapper.
+     *
      * @param mapper MappingStrategy for Bean
      * @return - list of methods for getting the data in the bean.
      * @throws IntrospectionException - thrown if there is an failure in Introspection.

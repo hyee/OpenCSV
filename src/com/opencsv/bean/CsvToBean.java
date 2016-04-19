@@ -42,6 +42,7 @@ public class CsvToBean<T> extends AbstractCSVToBean {
 
     /**
      * parse the values from a csvReader constructed from the passed in Reader.
+     *
      * @param mapper - mapping strategy for the bean.
      * @param reader - Reader used to construct a CSVReader
      * @return List of Objects.
@@ -53,6 +54,7 @@ public class CsvToBean<T> extends AbstractCSVToBean {
 
     /**
      * parse the values from a csvReader constructed from the passed in Reader.
+     *
      * @param mapper - mapping strategy for the bean.
      * @param reader - Reader used to construct a CSVReader
      * @param filter - CsvToBeanFilter to apply - null if no filter.
@@ -64,8 +66,9 @@ public class CsvToBean<T> extends AbstractCSVToBean {
 
     /**
      * parse the values from the csvReader.
+     *
      * @param mapper - mapping strategy for the bean.
-     * @param csv - CSVReader
+     * @param csv    - CSVReader
      * @return List of Objects.
      */
     public List<T> parse(MappingStrategy<T> mapper, CSVReader csv) {
@@ -74,8 +77,9 @@ public class CsvToBean<T> extends AbstractCSVToBean {
 
     /**
      * parse the values from the csvReader.
+     *
      * @param mapper - mapping strategy for the bean.
-     * @param csv - CSVReader
+     * @param csv    - CSVReader
      * @param filter - CsvToBeanFilter to apply - null if no filter.
      * @return List of Objects.
      */
@@ -110,13 +114,14 @@ public class CsvToBean<T> extends AbstractCSVToBean {
 
     /**
      * Creates a single object from a line from the csv file.
+     *
      * @param mapper - MappingStrategy
-     * @param line  - array of Strings from the csv file.
+     * @param line   - array of Strings from the csv file.
      * @return - object containing the values.
-     * @throws IllegalAccessException - thrown on error creating bean.
+     * @throws IllegalAccessException    - thrown on error creating bean.
      * @throws InvocationTargetException - thrown on error calling the setters.
-     * @throws InstantiationException - thrown on error creating bean.
-     * @throws IntrospectionException - thrown on error getting the PropertyDescriptor.
+     * @throws InstantiationException    - thrown on error creating bean.
+     * @throws IntrospectionException    - thrown on error getting the PropertyDescriptor.
      */
     protected T processLine(MappingStrategy<T> mapper, String[] line) throws IllegalAccessException, InvocationTargetException, InstantiationException, IntrospectionException {
         T bean = mapper.createBean();

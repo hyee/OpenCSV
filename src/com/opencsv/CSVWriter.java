@@ -20,6 +20,7 @@ import java.io.*;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 
@@ -31,6 +32,7 @@ import java.util.List;
 public class CSVWriter implements Closeable {
 
     public static final int INITIAL_STRING_SIZE = 128;
+    public static final String RFC4180_LINE_END = "\r\n";
     /**
      * The character used for escaping quotes.
      */
@@ -56,7 +58,6 @@ public class CSVWriter implements Closeable {
      * Default line terminator uses platform encoding.
      */
     public static String DEFAULT_LINE_END = "\n";
-    public static final String RFC4180_LINE_END = "\r\n";
     public static int INITIAL_BUFFER_SIZE = 8 << 20; //8 MB
 
     protected char separator;
@@ -71,7 +72,9 @@ public class CSVWriter implements Closeable {
     protected ResultSetHelperService resultService;
     protected FileBuffer buffer;
     protected boolean asyncMode = false;
-
+    protected HashMap<String, Boolean> excludes = new HashMap<>();
+    protected HashMap<String, String> remaps = new HashMap();
+    protected String[] titles;
 
     /**
      * Constructs CSVWriter using a comma for the separator.
@@ -96,7 +99,6 @@ public class CSVWriter implements Closeable {
         this(fileName, DEFAULT_SEPARATOR, DEFAULT_QUOTE_CHARACTER, DEFAULT_ESCAPE_CHARACTER, DEFAULT_LINE_END);
     }
 
-
     /**
      * Constructs CSVWriter with supplied separator.
      *
@@ -106,6 +108,7 @@ public class CSVWriter implements Closeable {
     public CSVWriter(Writer writer, char separator) {
         this(writer, separator, DEFAULT_QUOTE_CHARACTER);
     }
+
 
     /**
      * Constructs CSVWriter with supplied separator and quote char.
@@ -129,7 +132,6 @@ public class CSVWriter implements Closeable {
     public CSVWriter(Writer writer, char separator, char quotechar, char escapechar) {
         this(writer, separator, quotechar, escapechar, DEFAULT_LINE_END);
     }
-
 
     /**
      * Constructs CSVWriter with supplied separator and quote char.
@@ -158,6 +160,16 @@ public class CSVWriter implements Closeable {
         this.quotechar = quotechar;
         this.escapechar = escapechar;
         this.lineEnd = lineEnd;
+    }
+
+    public void setExclude(String columnName, boolean exclude) {
+        if(columnName==null) return;
+        excludes.put(columnName.toUpperCase().trim(), exclude);
+    }
+
+    public void setRemap(String columnName, String value) {
+        if(columnName==null) return;
+        remaps.put(columnName.toUpperCase().trim(), value.trim());
     }
 
     public void setAsyncMode(boolean mode) {
@@ -263,6 +275,8 @@ public class CSVWriter implements Closeable {
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws Exception {
         resultService = new ResultSetHelperService(rs);
+        titles=new String[resultService.columnNames.length];
+        for(int i=0;i<titles.length;i++) titles[i]=resultService.columnNames[i].trim().toUpperCase();
         if (includeColumnNames) {
             writeColumnNames();
             if (CSVFileName != null)
@@ -303,11 +317,14 @@ public class CSVWriter implements Closeable {
         }
         if (totalRows == 0) writeLog(0);
         lineWidth = 0;
+        int counter = 0;
+        String nextElement;
         for (int i = 0; i < nextLine.length; i++) {
-            if (i != 0) {
-                add(separator);
-            }
-            String nextElement = nextLine[i] == null ? "" : (String) nextLine[i];
+            if(titles!=null&&remaps.containsKey(titles[i])) nextElement=remaps.get(titles[i]);
+            else nextElement = nextLine[i] == null ? "" : (String) nextLine[i];
+            if (resultService != null && excludes.containsKey(resultService.columnNames[i].toUpperCase()) && excludes.get(resultService.columnNames[i].toUpperCase()))
+                continue;
+            if (++counter > 1) add(separator);
             Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
             if ((applyQuotesToAll || stringContainsSpecialCharacters) && quotechar != NO_QUOTE_CHARACTER) {
                 add(quotechar);
@@ -401,6 +418,7 @@ public class CSVWriter implements Closeable {
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
         b.append("FIELDS TERMINATED BY '").append(separator).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
+            if (excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase())) continue;
             if (i > 0) b.append(",\n");
             ColName = '"' + titles[i] + '"';
             b.append("    ").append(String.format("%-32s", ColName));

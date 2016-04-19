@@ -25,7 +25,7 @@ import java.io.Reader;
  * creating a Reader as there are so many possible values to be set it is
  * impossible to have constructors for all of them and keep backwards
  * compatibility with previous constructors.
- *
+ * <p/>
  * <code>
  * final CSVParser parser =
  * new CSVParserBuilder()
@@ -116,6 +116,7 @@ public class CSVReaderBuilder {
 
     /**
      * Creates the CSVReader.
+     *
      * @return the CSVReader based on the set criteria.
      */
     public CSVReader build() {
@@ -145,10 +146,10 @@ public class CSVReaderBuilder {
 
     /**
      * Checks to see if the CSVReader should verify the reader state before reads or not.
-     *
+     * <p/>
      * This should be set to false if you are using some form of asynchronous reader (like readers created
      * by the java.nio.* classes).
-     *
+     * <p/>
      * The default value is true.
      *
      * @param verifyReader true if CSVReader should verify reader before each read, false otherwise.

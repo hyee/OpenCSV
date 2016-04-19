@@ -20,7 +20,7 @@ import com.opencsv.enums.CSVReaderNullFieldIndicator;
 
 /**
  * Builder for creating a CSVParser.
- *
+ * <p/>
  * <code>
  * final CSVParser parser =
  * new CSVParserBuilder()
@@ -120,6 +120,7 @@ public class CSVParserBuilder {
 
     /**
      * Constructs CSVParser.
+     *
      * @return a new CSVParser with defined settings.
      */
     public CSVParser build() {

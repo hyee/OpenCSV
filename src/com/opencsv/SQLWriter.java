@@ -1,18 +1,19 @@
 package com.opencsv;
 
-import com.opencsv.util.StringUtils;
-
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Writer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class SQLWriter extends CSVWriter {
 
     public static int maxLineWidth = 1500;
     protected String columns;
+
+
     private String fileHeader = "";
     private String[] columnTypes;
 
@@ -36,25 +37,30 @@ public class SQLWriter extends CSVWriter {
         if (totalRows == 0) writeLog(0);
         add(columns);
         lineWidth = 2;
-        int flag = 0;
+        int counter = 0;
         for (int i = 0; i < Math.min(nextLine.length, this.columnTypes.length); i++) {
             if (this.columnTypes[i] == null) continue;
-            if (flag != 0) add(separator);
-            ++flag;
+            if (titles != null && excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase()))
+                continue;
+            if (++counter > 1) add(separator);
             if (lineWidth > maxLineWidth) {
                 add(lineEnd).add("    ");
                 lineWidth = 4;
             }
-            String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
-            Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean");
-
-            if (isString) {
-                add(quotechar);
-                if (nextElement.lastIndexOf(quotechar) >= 0) processLine(nextElement);
-                else add(nextElement);
-                add(quotechar);
-            } else {
+            if (remaps.containsKey(titles[i])) {
+                String nextElement = remaps.get(titles[i]);
                 add(nextElement == null ? "null" : nextElement);
+            } else {
+                String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
+                Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean");
+                if (isString) {
+                    add(quotechar);
+                    if (nextElement.lastIndexOf(quotechar) >= 0) processLine(nextElement);
+                    else add(nextElement);
+                    add(quotechar);
+                } else {
+                    add(nextElement == null ? "null" : nextElement);
+                }
             }
         }
         add(");").add(lineEnd);
@@ -63,8 +69,18 @@ public class SQLWriter extends CSVWriter {
     }
 
     private void init(String[] titles, String headerEncloser, int maxLineWidth) throws IOException {
-        columns = headerEncloser + StringUtils.join(titles, headerEncloser + "," + headerEncloser) + headerEncloser;
-        columns = "INSERT INTO " + buffer.fileName + "(" + columns + ")" + lineEnd + "  VALUES(";
+        StringBuilder sb = new StringBuilder();
+        sb.append("INSERT INTO ").append(buffer.fileName).append("(");
+        int counter = 0;
+        this.titles = titles;
+        for (int i = 0; i < titles.length; i++) {
+            this.titles[i] = titles[i].trim().toUpperCase();
+            if (excludes.containsKey(this.titles[i]) && excludes.get(this.titles[i])) continue;
+            if (++counter > 1) sb.append(",");
+            sb.append(headerEncloser).append(titles[i]).append(headerEncloser);
+        }
+        sb.append(")").append(lineEnd).append("  VALUES(");
+        columns = sb.toString();
         lineWidth = 0;
         this.maxLineWidth = maxLineWidth;
         add(fileHeader == null ? "" : fileHeader).add(lineEnd);
