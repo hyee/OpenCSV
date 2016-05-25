@@ -411,10 +411,10 @@ public class CSVWriter implements Closeable {
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
-        b.append("INFILE      ").append(buffer.fileName).append(".csv");
+        b.append("INFILE      ").append(buffer.fileName).append(".csv\n");
         if (rowSep != null) b.append(" \"STR '" + rowSep + "'\"\n");
-        b.append("BADFILE     ").append(buffer.fileName).append(".bad").append("\n");
-        b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc").append("\n");
+        b.append("BADFILE     ").append(buffer.fileName).append(".bad\n");
+        b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
         b.append("FIELDS TERMINATED BY '").append(separator).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
