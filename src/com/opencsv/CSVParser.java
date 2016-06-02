@@ -35,10 +35,6 @@ import static com.opencsv.enums.CSVReaderNullFieldIndicator.NEITHER;
 public class CSVParser {
 
     /**
-     * The default separator to use if none is supplied to the constructor.
-     */
-    public static final char DEFAULT_SEPARATOR = ',';
-    /**
      * The average size of a line read by openCSV (used for setting the size of StringBuilders).
      */
     public static final int INITIAL_READ_SIZE = 1024;
@@ -47,11 +43,6 @@ public class CSVParser {
      * to that plus an buffer size.
      */
     public static final int READ_BUFFER_SIZE = 128;
-    /**
-     * The default quote character to use if none is supplied to the
-     * constructor.
-     */
-    public static final char DEFAULT_QUOTE_CHARACTER = '"';
     /**
      * The default escape character to use if none is supplied to the
      * constructor.
@@ -79,7 +70,15 @@ public class CSVParser {
      * Denotes what field contents will cause the parser to return null:  EMPTY_SEPARATORS, EMPTY_QUOTES, BOTH, NEITHER (default)
      */
     public static final CSVReaderNullFieldIndicator DEFAULT_NULL_FIELD_INDICATOR = NEITHER;
-
+    /**
+     * The default separator to use if none is supplied to the constructor.
+     */
+    public static char DEFAULT_SEPARATOR = ',';
+    /**
+     * The default quote character to use if none is supplied to the
+     * constructor.
+     */
+    public static char DEFAULT_QUOTE_CHARACTER = '"';
     /**
      * This is the character that the CSVParser will treat as the separator.
      */

@@ -6,7 +6,6 @@ import java.io.Writer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 public class SQLWriter extends CSVWriter {
 
@@ -108,7 +107,7 @@ public class SQLWriter extends CSVWriter {
                 public void execute(Object[] row) throws Exception {
                     writeNextRow(row);
                 }
-            });
+            },false);
         } else {
             Object[] values;
             while ((values = resultService.getColumnValues()) != null) writeNextRow(values);

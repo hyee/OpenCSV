@@ -32,6 +32,7 @@ public class ResultSetHelperService {
 
     public static int RESULT_FETCH_SIZE = 30000;
     public static int MAX_FETCH_ROWS = -1;
+    public static boolean IS_TRIM = true;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
     public int columnCount;
@@ -140,7 +141,7 @@ public class ResultSetHelperService {
      * @throws IOException  - thrown by the result set.
      */
     public String[] getColumnValues() throws SQLException, IOException {
-        return this.getColumnValues(true, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
+        return this.getColumnValues(IS_TRIM, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT);
     }
 
     /**
@@ -304,7 +305,6 @@ public class ResultSetHelperService {
         });
         t.setDaemon(true);
         t.start();
-
 
         Object[] values;
         int count = 0;

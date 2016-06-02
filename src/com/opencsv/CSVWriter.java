@@ -31,21 +31,12 @@ import java.util.List;
  */
 public class CSVWriter implements Closeable {
 
-    public static final int INITIAL_STRING_SIZE = 128;
     public static final String RFC4180_LINE_END = "\r\n";
     /**
      * The character used for escaping quotes.
      */
     public static char DEFAULT_ESCAPE_CHARACTER = '"';
-    /**
-     * The default separator to use if none is supplied to the constructor.
-     */
-    public static char DEFAULT_SEPARATOR = ',';
-    /**
-     * The default quote character to use if none is supplied to the
-     * constructor.
-     */
-    public static char DEFAULT_QUOTE_CHARACTER = '"';
+
     /**
      * The quote constant to use when you wish to suppress all quoting.
      */
@@ -82,7 +73,7 @@ public class CSVWriter implements Closeable {
      * @param writer the writer to an underlying CSV source.
      */
     public CSVWriter(Writer writer) {
-        this(writer, DEFAULT_SEPARATOR);
+        this(writer, CSVParser.DEFAULT_SEPARATOR);
     }
 
     public CSVWriter(String fileName, char separator, char quotechar, char escapechar, String lineEnd) throws IOException {
@@ -96,7 +87,7 @@ public class CSVWriter implements Closeable {
     }
 
     public CSVWriter(String fileName) throws IOException {
-        this(fileName, DEFAULT_SEPARATOR, DEFAULT_QUOTE_CHARACTER, DEFAULT_ESCAPE_CHARACTER, DEFAULT_LINE_END);
+        this(fileName, CSVParser.DEFAULT_SEPARATOR, CSVParser.DEFAULT_QUOTE_CHARACTER, DEFAULT_ESCAPE_CHARACTER, DEFAULT_LINE_END);
     }
 
     /**
@@ -106,7 +97,7 @@ public class CSVWriter implements Closeable {
      * @param separator the delimiter to use for separating entries.
      */
     public CSVWriter(Writer writer, char separator) {
-        this(writer, separator, DEFAULT_QUOTE_CHARACTER);
+        this(writer, separator, CSVParser.DEFAULT_QUOTE_CHARACTER);
     }
 
 
@@ -163,12 +154,12 @@ public class CSVWriter implements Closeable {
     }
 
     public void setExclude(String columnName, boolean exclude) {
-        if(columnName==null) return;
+        if (columnName == null) return;
         excludes.put(columnName.toUpperCase().trim(), exclude);
     }
 
     public void setRemap(String columnName, String value) {
-        if(columnName==null) return;
+        if (columnName == null) return;
         remaps.put(columnName.toUpperCase().trim(), value.trim());
     }
 
@@ -259,7 +250,7 @@ public class CSVWriter implements Closeable {
      * @throws java.sql.SQLException thrown by getColumnValue
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames) throws Exception {
-        return writeAll(rs, includeColumnNames, true);
+        return writeAll(rs, includeColumnNames, false);
     }
 
     /**
@@ -275,8 +266,8 @@ public class CSVWriter implements Closeable {
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws Exception {
         resultService = new ResultSetHelperService(rs);
-        titles=new String[resultService.columnNames.length];
-        for(int i=0;i<titles.length;i++) titles[i]=resultService.columnNames[i].trim().toUpperCase();
+        titles = new String[resultService.columnNames.length];
+        for (int i = 0; i < titles.length; i++) titles[i] = resultService.columnNames[i].trim().toUpperCase();
         if (includeColumnNames) {
             writeColumnNames();
             if (CSVFileName != null)
@@ -320,7 +311,7 @@ public class CSVWriter implements Closeable {
         int counter = 0;
         String nextElement;
         for (int i = 0; i < nextLine.length; i++) {
-            if(titles!=null&&remaps.containsKey(titles[i])) nextElement=remaps.get(titles[i]);
+            if (titles != null && remaps.containsKey(titles[i])) nextElement = remaps.get(titles[i]);
             else nextElement = nextLine[i] == null ? "" : (String) nextLine[i];
             if (resultService != null && excludes.containsKey(resultService.columnNames[i].toUpperCase()) && excludes.get(resultService.columnNames[i].toUpperCase()))
                 continue;
@@ -404,19 +395,26 @@ public class CSVWriter implements Closeable {
         System.runFinalization();
     }
 
+    private String toHexIfInvisible(char c) {
+        String str = Integer.toHexString(c);
+        return c >= 32 ? "'" + c + "'" : "X'" + (str.length() == 1 ? "0" + str : str) + "'";
+    }
+
     public void createOracleCtlFileFromHeaders(String CSVFileName, String[] titles, String[] types, char encloser, char seperator, String rowSep) throws IOException {
         File file = new File(CSVFileName);
         String FileName = file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".ctl";
-        String ColName;
+        String ColName, str;
         FileWriter writer = new FileWriter(FileName);
-        StringBuilder b = new StringBuilder(INITIAL_STRING_SIZE);
+        StringBuilder b = new StringBuilder(CSVParser.READ_BUFFER_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
-        b.append("INFILE      ").append(buffer.fileName).append(".csv\n");
-        if (rowSep != null) b.append(" \"STR '" + rowSep + "'\"\n");
+        b.append("INFILE      ").append(buffer.fileName).append(".csv");
+        if (rowSep != null) b.append(" \"STR '" + rowSep + "'\"");
+        b.append("\n");
         b.append("BADFILE     ").append(buffer.fileName).append(".bad\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
-        b.append("FIELDS TERMINATED BY '").append(separator).append("' OPTIONALLY ENCLOSED BY '").append(encloser).append("' TRAILING NULLCOLS\n(\n");
+        b.append("FIELDS TERMINATED BY ").append(toHexIfInvisible(separator));
+        b.append(" OPTIONALLY ENCLOSED BY ").append(toHexIfInvisible(encloser)).append(" AND ").append(toHexIfInvisible(encloser)).append(" TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase())) continue;
             if (i > 0) b.append(",\n");
