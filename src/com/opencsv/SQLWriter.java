@@ -8,7 +8,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 
 public class SQLWriter extends CSVWriter {
-
+    public static char COLUMN_ENCLOSER='"';
     public static int maxLineWidth = 1500;
     protected String columns;
 
@@ -51,6 +51,7 @@ public class SQLWriter extends CSVWriter {
                 add(nextElement == null ? "null" : nextElement);
             } else {
                 String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
+
                 Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean");
                 if (isString) {
                     add(quotechar);
@@ -73,10 +74,12 @@ public class SQLWriter extends CSVWriter {
         int counter = 0;
         this.titles = titles;
         for (int i = 0; i < titles.length; i++) {
-            this.titles[i] = titles[i].trim().toUpperCase();
+            String title=titles[i].trim();
+            this.titles[i] = title.toUpperCase();
             if (excludes.containsKey(this.titles[i]) && excludes.get(this.titles[i])) continue;
             if (++counter > 1) sb.append(",");
-            sb.append(headerEncloser).append(titles[i]).append(headerEncloser);
+            if(!this.titles[i].matches("[A-Z][\\w\\$#]+$")) title=COLUMN_ENCLOSER+title+COLUMN_ENCLOSER;
+            sb.append(headerEncloser).append(title).append(headerEncloser);
         }
         sb.append(")").append(lineEnd).append("  VALUES(");
         columns = sb.toString();
