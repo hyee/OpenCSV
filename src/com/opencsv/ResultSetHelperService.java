@@ -17,6 +17,7 @@ package com.opencsv;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ public class ResultSetHelperService {
     private ArrayBlockingQueue<Object[]> queue;
     private Object[] EOF = new Object[1];
     private boolean isFinished;
+    private Method xmlStr;
 
     /**
      * Default Constructor.
@@ -199,6 +201,16 @@ public class ResultSetHelperService {
                     break;
                 default:
                     o = rs.getObject(i + 1);
+                    if((columnTypesI[i]==2009||columnTypesI[i]==2007)&&!rs.wasNull()) {
+                        try {
+                            Class clz=o.getClass();
+                            if(xmlStr==null)
+                                xmlStr=clz.getDeclaredMethod("getStringVal");
+                            o=xmlStr.invoke(o);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
             }
             if (o != null && rs.wasNull()) o = null;
 
