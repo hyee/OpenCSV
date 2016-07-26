@@ -201,7 +201,7 @@ public class ResultSetHelperService {
                     break;
                 default:
                     o = rs.getObject(i + 1);
-                    if((columnTypesI[i]==2009||columnTypesI[i]==2007)&&!rs.wasNull()) {
+                    if((columnTypesI[i]==2009)&&!rs.wasNull()) {
                         try {
                             Class clz=o.getClass();
                             if(xmlStr==null)
