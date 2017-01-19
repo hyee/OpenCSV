@@ -9,8 +9,5 @@ package com.opencsv.enums;
  * NEITHER - default.  Both are considered empty string.
  */
 public enum CSVReaderNullFieldIndicator {
-    EMPTY_SEPARATORS,
-    EMPTY_QUOTES,
-    BOTH,
-    NEITHER;
+    EMPTY_SEPARATORS, EMPTY_QUOTES, BOTH, NEITHER;
 }

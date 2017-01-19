@@ -23,7 +23,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
-
 /**
  * A very simple CSV writer released under a commercial-friendly license.
  *
@@ -100,7 +99,6 @@ public class CSVWriter implements Closeable {
         this(writer, separator, CSVParser.DEFAULT_QUOTE_CHARACTER);
     }
 
-
     /**
      * Constructs CSVWriter with supplied separator and quote char.
      *
@@ -135,7 +133,6 @@ public class CSVWriter implements Closeable {
     public CSVWriter(Writer writer, char separator, char quotechar, String lineEnd) {
         this(writer, separator, quotechar, DEFAULT_ESCAPE_CHARACTER, lineEnd);
     }
-
 
     /**
      * Constructs CSVWriter with supplied separator, quote char, escape char and line ending.
@@ -282,7 +279,7 @@ public class CSVWriter implements Closeable {
                 }
             });
         } else {
-            String[] values;
+            Object[] values;
             while ((values = resultService.getColumnValues(true)) != null) writeNext(values);
         }
         close();
@@ -312,7 +309,7 @@ public class CSVWriter implements Closeable {
         String nextElement;
         for (int i = 0; i < nextLine.length; i++) {
             if (titles != null && remaps.containsKey(titles[i])) nextElement = remaps.get(titles[i]);
-            else nextElement = nextLine[i] == null ? "" : (String) nextLine[i];
+            else nextElement = nextLine[i] == null ? "" : nextLine[i].toString();
             if (resultService != null && excludes.containsKey(resultService.columnNames[i].toUpperCase()) && excludes.get(resultService.columnNames[i].toUpperCase()))
                 continue;
             if (++counter > 1) add(separator);
@@ -373,13 +370,11 @@ public class CSVWriter implements Closeable {
         }
     }
 
-
     /**
      * Flush underlying stream to writer.
      *
      * @throws IOException if bad things happen
      */
-
 
     /**
      * Close the underlying stream writer flushing any buffered content.

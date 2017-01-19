@@ -31,7 +31,6 @@ public class StringUtils {
         return !isBlank(cs);
     }
 
-
     public static String join(Object[] array, String separator) {
         if (array == null) {
             return null;

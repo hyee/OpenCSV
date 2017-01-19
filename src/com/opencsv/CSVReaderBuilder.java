@@ -15,7 +15,6 @@
  */
 package com.opencsv;
 
-
 import com.opencsv.enums.CSVReaderNullFieldIndicator;
 
 import java.io.Reader;
@@ -101,7 +100,6 @@ public class CSVReaderBuilder {
         return this;
     }
 
-
     /**
      * Sets the parser to use to parse the input.
      *
@@ -112,7 +110,6 @@ public class CSVReaderBuilder {
         this.csvParser = csvParser;
         return this;
     }
-
 
     /**
      * Creates the CSVReader.

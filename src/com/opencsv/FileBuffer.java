@@ -13,7 +13,6 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-
 public class FileBuffer implements Closeable {
     public static int BUFFER_RESERVED_SIZE = 1 << 20;
     public String fileName;
@@ -30,7 +29,6 @@ public class FileBuffer implements Closeable {
     protected Charset charset;
     protected byte[] bList = new byte[BUFFER_RESERVED_SIZE];
     protected int bLen = 0;
-
 
     public FileBuffer(int bufferSize, String path, String default_ext, String charset) throws IOException {
         try {

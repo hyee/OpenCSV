@@ -123,7 +123,6 @@ public class CSVParser {
         this(separator, DEFAULT_QUOTE_CHARACTER, DEFAULT_ESCAPE_CHARACTER);
     }
 
-
     /**
      * Constructs CSVParser with supplied separator and quote char.
      *
@@ -215,7 +214,6 @@ public class CSVParser {
         this.ignoreQuotations = ignoreQuotations;
         this.nullFieldIndicator = nullFieldIndicator;
     }
-
 
     /**
      * @return The default separator for this parser.
@@ -368,8 +366,7 @@ public class CSVParser {
                     if (!strictQuotes) {
                         if (i > 2 //not on the beginning of the line
                                 && nextLine.charAt(i - 1) != this.separator //not at the beginning of an escape sequence
-                                && nextLine.length() > (i + 1) &&
-                                nextLine.charAt(i + 1) != this.separator //not at the	end of an escape sequence
+                                && nextLine.length() > (i + 1) && nextLine.charAt(i + 1) != this.separator //not at the	end of an escape sequence
                                 ) {
 
                             if (ignoreLeadingWhiteSpace && sb.length() > 0 && isAllWhiteSpace(sb)) {

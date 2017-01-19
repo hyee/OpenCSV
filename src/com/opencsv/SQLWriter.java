@@ -8,10 +8,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 
 public class SQLWriter extends CSVWriter {
-    public static char COLUMN_ENCLOSER='"';
+    public static char COLUMN_ENCLOSER = '"';
     public static int maxLineWidth = 1500;
     protected String columns;
-
 
     private String fileHeader = "";
     private String[] columnTypes;
@@ -25,7 +24,6 @@ public class SQLWriter extends CSVWriter {
         super(fileName, ',', '\'', '\'', "\n");
         setBufferSize(INITIAL_BUFFER_SIZE);
     }
-
 
     public void setMaxLineWidth(int width) {
         maxLineWidth = width;
@@ -52,7 +50,7 @@ public class SQLWriter extends CSVWriter {
             } else {
                 String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
 
-                Boolean isString = nextElement != null && !this.columnTypes[i].equals("number") && !this.columnTypes[i].equals("boolean");
+                Boolean isString = nextElement != null && !this.columnTypes[i].equals("double") && !this.columnTypes[i].equals("boolean");
                 if (isString) {
                     add(quotechar);
                     if (nextElement.lastIndexOf(quotechar) >= 0) processLine(nextElement);
@@ -74,11 +72,11 @@ public class SQLWriter extends CSVWriter {
         int counter = 0;
         this.titles = titles;
         for (int i = 0; i < titles.length; i++) {
-            String title=titles[i].trim();
+            String title = titles[i].trim();
             this.titles[i] = title.toUpperCase();
             if (excludes.containsKey(this.titles[i]) && excludes.get(this.titles[i])) continue;
             if (++counter > 1) sb.append(",");
-            if(!this.titles[i].matches("[A-Z][\\w\\$#]+$")) title=COLUMN_ENCLOSER+title+COLUMN_ENCLOSER;
+            if (!this.titles[i].matches("[A-Z][\\w\\$#]+$")) title = COLUMN_ENCLOSER + title + COLUMN_ENCLOSER;
             sb.append(headerEncloser).append(title).append(headerEncloser);
         }
         sb.append(")").append(lineEnd).append("  VALUES(");
@@ -110,7 +108,7 @@ public class SQLWriter extends CSVWriter {
                 public void execute(Object[] row) throws Exception {
                     writeNextRow(row);
                 }
-            },false);
+            }, false);
         } else {
             Object[] values;
             while ((values = resultService.getColumnValues()) != null) writeNextRow(values);

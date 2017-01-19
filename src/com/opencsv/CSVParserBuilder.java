@@ -15,7 +15,6 @@
  */
 package com.opencsv;
 
-
 import com.opencsv.enums.CSVReaderNullFieldIndicator;
 
 /**
@@ -58,7 +57,6 @@ public class CSVParserBuilder {
         return this;
     }
 
-
     /**
      * Sets the character to use for quoted elements.
      *
@@ -70,7 +68,6 @@ public class CSVParserBuilder {
         return this;
     }
 
-
     /**
      * Sets the character to use for escaping a separator or quote.
      *
@@ -81,7 +78,6 @@ public class CSVParserBuilder {
         this.escapeChar = escapeChar;
         return this;
     }
-
 
     /**
      * Sets the strict quotes setting - if true, characters
