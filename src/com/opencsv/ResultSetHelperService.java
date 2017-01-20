@@ -22,6 +22,7 @@ public class ResultSetHelperService {
     public int columnCount;
     public String[] columnNames;
     public String[] columnTypes;
+    public String[] columnClassName;
     public int[] columnTypesI;
     public Object[] rowValue;
     public Object[] rowObject;
@@ -53,12 +54,13 @@ public class ResultSetHelperService {
         isFinished = false;
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
+        columnClassName = new String[columnCount];
         columnTypesI = new int[columnCount];
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             int type = metadata.getColumnType(i + 1);
+            String jdbcType=metadata.getColumnTypeName(i+1);
             String value;
             switch (type) {
-                case Types.BIT:
                 case Types.JAVA_OBJECT:
                     value = "object";
                     break;
@@ -73,6 +75,9 @@ public class ResultSetHelperService {
                     value = "double";
                     break;
                 case Types.BIGINT:
+                    value = "long";
+                    break;
+                case Types.BIT:
                 case Types.INTEGER:
                 case Types.TINYINT:
                 case Types.SMALLINT:
@@ -90,6 +95,8 @@ public class ResultSetHelperService {
                     break;
                 case -101:
                 case -102:
+                //case Types.TIME_WITH_TIMEZONE:
+                //case Types.TIMESTAMP_WITH_TIMEZONE:
                     value = "timestamptz";
                     break;
                 case Types.BINARY:
@@ -160,6 +167,10 @@ public class ResultSetHelperService {
         }
         Object o;
         for (int i = 0; i < columnCount; i++) {
+            if(columnClassName[i]==null) {
+                o=rs.getObject(i+1);
+                if(o!=null) columnClassName[i]=o.getClass().getName();
+            }
             switch (columnTypes[i]) {
                 case "timestamptz":
                 case "timestamp":
@@ -184,7 +195,7 @@ public class ResultSetHelperService {
                     break;
                 default:
                     o = rs.getObject(i + 1);
-                    if ((columnTypesI[i] == 2009) && !rs.wasNull()) {
+                    if (!rs.wasNull()&&columnClassName[i].equals("oracle.sql.SQLXML")) {
                         try {
                             Class clz = o.getClass();
                             if (xmlStr == null) xmlStr = clz.getDeclaredMethod("getStringVal");
@@ -192,11 +203,13 @@ public class ResultSetHelperService {
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
+                    } else if(o!=null&&columnTypes[i].equals("int")) {
+                        o=Integer.valueOf(o.toString());
                     }
             }
             if (o != null && rs.wasNull()) o = null;
             if (queue == null)
-                rowValue[i] = getColumnValue(o, columnTypes[i], trim, dateFormatString, timeFormatString);
+                rowValue[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
             else rowObject[i] = o;
         }
         cost += System.nanoTime() - sec;
@@ -241,10 +254,10 @@ public class ResultSetHelperService {
         return timestamp == null ? null : timeTZFormat.format(timestamp);
     }
 
-    private Object getColumnValue(Object o, String colType, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
+    private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return null;
         String str;
-        switch (colType) {
+        switch (columnTypes[colIndex]) {
             case "object":
                 str = handleObject(o);
                 break;
@@ -253,14 +266,20 @@ public class ResultSetHelperService {
             case "int":
                 return Integer.valueOf(o.toString());
             case "double":
+            case "long":
                 str = o.toString();
-                return Double.valueOf(str);
+                //return Double.valueOf(str);
+                return str;
             case "date":
             case "time":
                 str = handleDate((Date) o, dateFormatString);
                 break;
             case "timestamp":
                 str = handleTimestamp((Timestamp) o, timestampFormatString);
+                if(columnClassName[colIndex].startsWith("oracle.sql.DATE")) {
+                    int pos=str.lastIndexOf('.');
+                    if(pos>0) str=str.substring(0,pos-1);
+                }
                 break;
             case "timestamptz":
                 str = handleTimestampTZ((Timestamp) o, timestampFormatString);
@@ -285,8 +304,11 @@ public class ResultSetHelperService {
             @Override
             public void run() {
                 try {
-                    while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
-                        queue.put(getColumnValues() == null ? EOF : rowObject);
+                    while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null) {
+                        Object[] o=getColumnValues();
+                        queue.put( o== null ? EOF : rowObject);
+                    }
+
                 } catch (NullPointerException e0) {
                 } catch (Exception e) {
                     try {
@@ -304,7 +326,7 @@ public class ResultSetHelperService {
         int count = 0;
         while ((values = queue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
             for (int i = 0; i < columnCount; i++)
-                values[i] = getColumnValue(values[i], columnTypes[i], trim, dateFormatString, timeFormatString);
+                values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
             c.execute(values);
         }
         queue = null;

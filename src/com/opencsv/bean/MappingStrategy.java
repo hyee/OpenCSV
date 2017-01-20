@@ -1,5 +1,6 @@
 package com.opencsv.bean;
 
+
 /**
  * Copyright 2007 Kyle Miller.
  * <p/>
