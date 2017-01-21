@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
 
 /**
@@ -24,14 +25,14 @@ public class ResultSetHelperService {
     public String[] columnTypes;
     public String[] columnClassName;
     public int[] columnTypesI;
-    public Object[] rowValue;
     public Object[] rowObject;
     public long cost = 0;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
     private ResultSet rs;
-    private ArrayBlockingQueue<Object[]> queue;
+    private ArrayBlockingQueue<Object[]> destQueue;
+    private ArrayBlockingQueue<Object[]> srcQueue;
     private Object[] EOF = new Object[1];
     private boolean isFinished;
     private Method xmlStr;
@@ -50,7 +51,6 @@ public class ResultSetHelperService {
         }
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
-        rowValue = new Object[columnCount];
         isFinished = false;
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
@@ -165,6 +165,7 @@ public class ResultSetHelperService {
             isFinished = true;
             return null;
         }
+        if(rowObject==null) rowObject=new Object[columnCount];
         Object o;
         for (int i = 0; i < columnCount; i++) {
             if(columnClassName[i]==null) {
@@ -208,12 +209,12 @@ public class ResultSetHelperService {
                     }
             }
             if (o != null && rs.wasNull()) o = null;
-            if (queue == null)
-                rowValue[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
+            if (destQueue == null)
+                rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
             else rowObject[i] = o;
         }
         cost += System.nanoTime() - sec;
-        return rowValue;
+        return rowObject;
     }
 
     /**
@@ -293,26 +294,28 @@ public class ResultSetHelperService {
         return trim ? str.trim() : str;
     }
 
-    public void startAsyncFetch(final RowCallback c, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
-        if (fetchRows < 0) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
-        else {
-            queue = new ArrayBlockingQueue<>(fetchRows);
-            rs.setFetchSize(fetchRows);
+    public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
+        if (fetchRows < 0) {
+            destQueue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
+        }else {
+            int size=Math.min(fetchRows,RESULT_FETCH_SIZE*2);
+            destQueue = new ArrayBlockingQueue<>(size+10);
+            rs.setFetchSize(size/2+1);
             rs.getStatement().setMaxRows(fetchRows);
         }
+        srcQueue=new ArrayBlockingQueue<>(destQueue.remainingCapacity());
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null) {
-                        Object[] o=getColumnValues();
-                        queue.put( o== null ? EOF : rowObject);
+                    while (destQueue != null && !isFinished) {
+                        rowObject = srcQueue.poll();
+                        destQueue.put( getColumnValues()== null ? EOF : rowObject);
                     }
-
                 } catch (NullPointerException e0) {
                 } catch (Exception e) {
                     try {
-                        if (queue != null) queue.put(EOF);
+                        if (destQueue != null) destQueue.put(EOF);
                     } catch (Exception e1) {
                     }
                     if (e.getMessage().toLowerCase().indexOf("closed") == -1) e.printStackTrace();
@@ -324,12 +327,14 @@ public class ResultSetHelperService {
 
         Object[] values;
         int count = 0;
-        while ((values = queue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
+        while ((values = destQueue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
             for (int i = 0; i < columnCount; i++)
                 values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
-            c.execute(values);
+            callback.execute(values);
+            srcQueue.offer(values);
         }
-        queue = null;
+        destQueue = null;
+        srcQueue=null;
         t.join();
     }
 
@@ -339,21 +344,21 @@ public class ResultSetHelperService {
         startAsyncFetch(new RowCallback() {
             @Override
             public void execute(Object[] row) throws Exception {
-                ary.add(row);
+                ary.add(row.clone());
             }
         }, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
         return ary.toArray(new Object[][]{});
     }
 
     public Object[][] fetchRows(int rows) throws Exception {
-        queue = null;
+        destQueue = null;
         final ArrayList<Object[]> ary = new ArrayList();
         Object[] row;
         int counter = 0;
         while (rows < 0 || ++counter <= rows) {
             row = getColumnValues();
             if (row == null) break;
-            ary.add(row);
+            ary.add(row.clone());
         }
         return ary.toArray(new Object[][]{});
     }
