@@ -58,7 +58,6 @@ public class ResultSetHelperService {
         columnTypesI = new int[columnCount];
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             int type = metadata.getColumnType(i + 1);
-            String jdbcType=metadata.getColumnTypeName(i+1);
             String value;
             switch (type) {
                 case Types.JAVA_OBJECT:
@@ -163,6 +162,7 @@ public class ResultSetHelperService {
         if (!rs.next()) {
             rs.close();
             isFinished = true;
+            cost += System.nanoTime() - sec;
             return null;
         }
         if(rowObject==null) rowObject=new Object[columnCount];
@@ -196,7 +196,7 @@ public class ResultSetHelperService {
                     break;
                 default:
                     o = rs.getObject(i + 1);
-                    if (!rs.wasNull()&&columnClassName[i].equals("oracle.sql.SQLXML")) {
+                    if (!rs.wasNull()&&columnTypesI[i]==2009) {//Oracle XMLType
                         try {
                             Class clz = o.getClass();
                             if (xmlStr == null) xmlStr = clz.getDeclaredMethod("getStringVal");
