@@ -205,11 +205,12 @@ public class CSVWriter implements Closeable {
      *                         quote or new line characters.
      */
     public int writeAll(List<String[]> allLines, boolean applyQuotesToAll) throws IOException {
-        for (String[] line : allLines) {
-            writeNext(line, applyQuotesToAll);
+        try(CSVWriter c=this) {
+            for (String[] line : allLines) {
+                writeNext(line, applyQuotesToAll);
+            }
+            return totalRows;
         }
-        close();
-        return totalRows;
     }
 
     /**
@@ -220,11 +221,7 @@ public class CSVWriter implements Closeable {
      *                 the file.
      */
     public int writeAll(List<String[]> allLines) throws IOException {
-        for (String[] line : allLines) {
-            writeNext(line);
-        }
-        close();
-        return totalRows;
+        return writeAll(allLines,false);
     }
 
     /**
@@ -262,28 +259,28 @@ public class CSVWriter implements Closeable {
      * @throws java.sql.SQLException thrown by getColumnValue
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws Exception {
-        resultService = new ResultSetHelperService(rs);
-        titles = new String[resultService.columnNames.length];
-        for (int i = 0; i < titles.length; i++) titles[i] = resultService.columnNames[i].trim().toUpperCase();
-        if (includeColumnNames) {
-            writeColumnNames();
-            if (CSVFileName != null)
-                createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, resultService.columnTypes, quotechar, separator, null);
-        }
+        try(CSVWriter c=this;ResultSetHelperService resultService = new ResultSetHelperService(rs)){
+            this.resultService=resultService;
+            titles = new String[resultService.columnNames.length];
+            for (int i = 0; i < titles.length; i++) titles[i] = resultService.columnNames[i].trim().toUpperCase();
+            if (includeColumnNames) {
+                writeColumnNames();
+                if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, resultService.columnTypes, quotechar, separator, null);
+            }
 
-        if (asyncMode) {
-            resultService.startAsyncFetch(new RowCallback() {
-                @Override
-                public void execute(Object[] row) throws Exception {
-                    writeNext(row);
-                }
-            });
-        } else {
-            Object[] values;
-            while ((values = resultService.getColumnValues(true)) != null) writeNext(values);
+            if (asyncMode) {
+                resultService.startAsyncFetch(new RowCallback() {
+                    @Override
+                    public void execute(Object[] row) throws Exception {
+                        writeNext(row);
+                    }
+                });
+            } else {
+                Object[] values;
+                while ((values = resultService.getColumnValues(true)) != null) writeNext(values);
+            }
+            return totalRows;
         }
-        close();
-        return totalRows;
     }
 
     public void flush(boolean force) throws IOException {

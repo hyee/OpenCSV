@@ -31,7 +31,6 @@ public class StringUtils {
         return !isBlank(cs);
     }
 
-
     public static String join(Object[] array, String separator) {
         if (array == null) {
             return null;
@@ -62,15 +61,15 @@ public class StringUtils {
     /**
      * <p>Checks if the CharSequence contains only Unicode digits.
      * A decimal point is not a Unicode digit and returns false.</p>
-     *
+     * <p>
      * <p>{@code null} will return {@code false}.
      * An empty CharSequence (length()=0) will return {@code false}.</p>
-     *
+     * <p>
      * <p>Note that the method does not allow for a leading sign, either positive or negative.
      * Also, if a String passes the numeric test, it may still generate a NumberFormatException
      * when parsed by Integer.parseInt or Long.parseLong, e.g. if the value is outside the range
      * for int or long respectively.</p>
-     *
+     * <p>
      * <pre>
      * StringUtils.isNumeric(null)   = false
      * StringUtils.isNumeric("")     = false
@@ -85,9 +84,8 @@ public class StringUtils {
      * StringUtils.isNumeric("+123") = false
      * </pre>
      *
-     * @param cs  the CharSequence to check, may be null
+     * @param cs the CharSequence to check, may be null
      * @return {@code true} if only contains digits, and is non-null
-     * @since 3.0 Changed signature from isNumeric(String) to isNumeric(CharSequence)
      * @since 3.0 Changed "" to return false and not true
      */
     public static boolean isNumeric(final CharSequence cs) {

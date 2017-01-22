@@ -1,6 +1,14 @@
 package com.opencsv;
 
+import com.lmax.disruptor.BlockingWaitStrategy;
+import com.lmax.disruptor.EventFactory;
+import com.lmax.disruptor.EventHandler;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
+
 import javax.xml.bind.DatatypeConverter;
+import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.sql.*;
@@ -8,14 +16,15 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * Created by Tyler on 30/12/2016.
  */
-public class ResultSetHelperService {
+public class ResultSetHelperService implements Closeable {
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
-    public static int RESULT_FETCH_SIZE = 30000;
+    public static int RESULT_FETCH_SIZE = 3000;
     public static int MAX_FETCH_ROWS = -1;
     public static boolean IS_TRIM = true;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
@@ -27,16 +36,22 @@ public class ResultSetHelperService {
     public int[] columnTypesI;
     public Object[] rowObject;
     public long cost = 0;
+
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
     private ResultSet rs;
-    private ArrayBlockingQueue<Object[]> destQueue;
-    private ArrayBlockingQueue<Object[]> srcQueue;
     private Object[] EOF = new Object[1];
-    private boolean isFinished;
     private Method xmlStr;
 
+    class Row {
+        private Object[] value;
+
+        public Object[] get() {return value;}
+
+        public void set(Object[] value) {this.value = value;}
+    }
+    Disruptor<Row> disruptor;
     /**
      * Default Constructor.
      */
@@ -47,11 +62,9 @@ public class ResultSetHelperService {
         RESULT_FETCH_SIZE = fetchSize;
         try {
             rs.setFetchDirection(ResultSet.FETCH_FORWARD);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) {}
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
-        isFinished = false;
         columnNames = new String[columnCount];
         columnTypes = new String[columnCount];
         columnClassName = new String[columnCount];
@@ -94,8 +107,8 @@ public class ResultSetHelperService {
                     break;
                 case -101:
                 case -102:
-                //case Types.TIME_WITH_TIMEZONE:
-                //case Types.TIMESTAMP_WITH_TIMEZONE:
+                    //case Types.TIME_WITH_TIMEZONE:
+                    //case Types.TIMESTAMP_WITH_TIMEZONE:
                     value = "timestamptz";
                     break;
                 case Types.BINARY:
@@ -159,18 +172,17 @@ public class ResultSetHelperService {
      */
     public Object[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         long sec = System.nanoTime();
-        if (!rs.next()) {
-            rs.close();
-            isFinished = true;
+        if (rs == null || rs.isClosed() || !rs.next()) {
+            if (rs != null) rs.close();
             cost += System.nanoTime() - sec;
             return null;
         }
-        if(rowObject==null) rowObject=new Object[columnCount];
+        if (rowObject == null) rowObject = new Object[columnCount];
         Object o;
         for (int i = 0; i < columnCount; i++) {
-            if(columnClassName[i]==null) {
-                o=rs.getObject(i+1);
-                if(o!=null) columnClassName[i]=o.getClass().getName();
+            if (columnClassName[i] == null) {
+                o = rs.getObject(i + 1);
+                if (o != null) columnClassName[i] = o.getClass().getName();
             }
             switch (columnTypes[i]) {
                 case "timestamptz":
@@ -196,7 +208,7 @@ public class ResultSetHelperService {
                     break;
                 default:
                     o = rs.getObject(i + 1);
-                    if (!rs.wasNull()&&columnTypesI[i]==2009) {//Oracle XMLType
+                    if (!rs.wasNull() && columnTypesI[i] == 2009) {//Oracle XMLType
                         try {
                             Class clz = o.getClass();
                             if (xmlStr == null) xmlStr = clz.getDeclaredMethod("getStringVal");
@@ -204,17 +216,26 @@ public class ResultSetHelperService {
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                    } else if(o!=null&&columnTypes[i].equals("int")) {
-                        o=Integer.valueOf(o.toString());
+                    } else if (o != null && columnTypes[i].equals("int")) {
+                        o = Integer.valueOf(o.toString());
                     }
             }
             if (o != null && rs.wasNull()) o = null;
-            if (destQueue == null)
-                rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
+            if (disruptor == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
             else rowObject[i] = o;
         }
         cost += System.nanoTime() - sec;
         return rowObject;
+    }
+
+    @Override
+    public void close() {
+        try{
+        if(rs!=null&&!rs.isClosed())
+            rs.close();
+        if(disruptor!=null) disruptor.shutdown();
+        } catch (Exception e) {}
+        disruptor=null;
     }
 
     /**
@@ -277,9 +298,9 @@ public class ResultSetHelperService {
                 break;
             case "timestamp":
                 str = handleTimestamp((Timestamp) o, timestampFormatString);
-                if(columnClassName[colIndex].startsWith("oracle.sql.DATE")) {
-                    int pos=str.lastIndexOf('.');
-                    if(pos>0) str=str.substring(0,pos-1);
+                if (columnClassName[colIndex].startsWith("oracle.sql.DATE")) {
+                    int pos = str.lastIndexOf('.');
+                    if (pos > 0) str = str.substring(0, pos - 1);
                 }
                 break;
             case "timestamptz":
@@ -295,47 +316,59 @@ public class ResultSetHelperService {
     }
 
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
-        if (fetchRows < 0) {
-            destQueue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
-        }else {
-            int size=Math.min(fetchRows,RESULT_FETCH_SIZE*2);
-            destQueue = new ArrayBlockingQueue<>(size+10);
-            rs.setFetchSize(size/2+1);
+        int bufferSize = RESULT_FETCH_SIZE+10;
+        if (fetchRows > 0) {
+            bufferSize = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE)) + 10;
             rs.getStatement().setMaxRows(fetchRows);
         }
-        srcQueue=new ArrayBlockingQueue<>(destQueue.remainingCapacity());
-        Thread t = new Thread(new Runnable() {
+        bufferSize = Double.valueOf(Math.pow(2, Math.ceil(Math.log(bufferSize) / Math.log(2)))).intValue();
+        rs.setFetchSize(bufferSize / 2 - 5);
+        // RingBuffer生产工厂,初始化RingBuffer的时候使用
+        EventFactory<Row> factory = new EventFactory<Row>() {
             @Override
-            public void run() {
-                try {
-                    while (destQueue != null && !isFinished) {
-                        rowObject = srcQueue.poll();
-                        destQueue.put( getColumnValues()== null ? EOF : rowObject);
-                    }
-                } catch (NullPointerException e0) {
-                } catch (Exception e) {
-                    try {
-                        if (destQueue != null) destQueue.put(EOF);
-                    } catch (Exception e1) {
-                    }
-                    if (e.getMessage().toLowerCase().indexOf("closed") == -1) e.printStackTrace();
-                }
+            public Row newInstance() {
+                return new Row();
             }
-        });
-        t.setDaemon(true);
-        t.start();
+        };
 
-        Object[] values;
-        int count = 0;
-        while ((values = destQueue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
-            for (int i = 0; i < columnCount; i++)
-                values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
-            callback.execute(values);
-            srcQueue.offer(values);
+        EventHandler<Row> handler = new EventHandler<Row>() {
+            @Override
+            public void onEvent(Row element, long sequence, boolean endOfBatch) throws Exception {
+                Object[] values = element.get();
+                if (values == EOF) return;
+                for (int i = 0; i < columnCount; i++)
+                    values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
+            }
+        };
+
+        EventHandler<Row> handler2 = new EventHandler<Row>() {
+            @Override
+            public void onEvent(Row element, long sequence, boolean endOfBatch) throws Exception {
+                Object[] values = element.get();
+                if(values==EOF) return;
+                callback.execute(values);
+            }
+        };
+        disruptor = new Disruptor(factory, bufferSize, new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setDaemon(true);
+                return t;
+            }
+        }, ProducerType.SINGLE, new BlockingWaitStrategy());
+        disruptor.handleEventsWith(handler).then(handler2);
+        RingBuffer<Row> ringBuffer = disruptor.start();
+        while (rs != null && !rs.isClosed()) {
+            long sequence = ringBuffer.next();
+            Row o = ringBuffer.get(sequence);
+            disruptor.getCursor();
+            rowObject = o.get();
+            if(rowObject==null) ringBuffer.get(ringBuffer.getCursor());
+            o.set(getColumnValues() == null ? EOF : rowObject);
+            ringBuffer.publish(sequence);
         }
-        destQueue = null;
-        srcQueue=null;
-        t.join();
+        disruptor.shutdown();
     }
 
     public Object[][] fetchRowsAsync(int rows) throws Exception {
@@ -347,11 +380,12 @@ public class ResultSetHelperService {
                 ary.add(row.clone());
             }
         }, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
-        return ary.toArray(new Object[][]{});
+        Object[][] o= ary.toArray(new Object[][]{});
+        return o;
     }
 
     public Object[][] fetchRows(int rows) throws Exception {
-        destQueue = null;
+        disruptor = null;
         final ArrayList<Object[]> ary = new ArrayList();
         Object[] row;
         int counter = 0;

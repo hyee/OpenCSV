@@ -17,7 +17,6 @@ package com.opencsv.util;
  * limitations under the License.
  */
 
-
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -560,9 +559,7 @@ public class NumberUtils {
             switch (lastChar) {
                 case 'l':
                 case 'L':
-                    if (dec == null
-                            && exp == null
-                            && (numeric.charAt(0) == '-' && isDigits(numeric.substring(1)) || isDigits(numeric))) {
+                    if (dec == null && exp == null && (numeric.charAt(0) == '-' && isDigits(numeric.substring(1)) || isDigits(numeric))) {
                         try {
                             return createLong(numeric);
                         } catch (final NumberFormatException nfe) { // NOPMD
@@ -631,9 +628,7 @@ public class NumberUtils {
         try {
             final Float f = createFloat(str);
             final Double d = createDouble(str);
-            if (!f.isInfinite()
-                    && !(f.floatValue() == 0.0F && !allZeros)
-                    && f.toString().equals(d.toString())) {
+            if (!f.isInfinite() && !(f.floatValue() == 0.0F && !allZeros) && f.toString().equals(d.toString())) {
                 return f;
             }
             if (!d.isInfinite() && !(d.doubleValue() == 0.0D && !allZeros)) {
@@ -1450,9 +1445,7 @@ public class NumberUtils {
                 }
                 // checking hex (it can't be anything else)
                 for (; i < chars.length; i++) {
-                    if ((chars[i] < '0' || chars[i] > '9')
-                            && (chars[i] < 'a' || chars[i] > 'f')
-                            && (chars[i] < 'A' || chars[i] > 'F')) {
+                    if ((chars[i] < '0' || chars[i] > '9') && (chars[i] < 'a' || chars[i] > 'f') && (chars[i] < 'A' || chars[i] > 'F')) {
                         return false;
                     }
                 }
@@ -1523,15 +1516,10 @@ public class NumberUtils {
                 // single trailing decimal point after non-exponent is ok
                 return foundDigit;
             }
-            if (!allowSigns
-                    && (chars[i] == 'd'
-                    || chars[i] == 'D'
-                    || chars[i] == 'f'
-                    || chars[i] == 'F')) {
+            if (!allowSigns && (chars[i] == 'd' || chars[i] == 'D' || chars[i] == 'f' || chars[i] == 'F')) {
                 return foundDigit;
             }
-            if (chars[i] == 'l'
-                    || chars[i] == 'L') {
+            if (chars[i] == 'l' || chars[i] == 'L') {
                 // not allowing L with an exponent or decimal point
                 return foundDigit && !hasExp && !hasDecPoint;
             }

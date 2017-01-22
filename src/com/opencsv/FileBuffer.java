@@ -165,7 +165,7 @@ public class FileBuffer implements Closeable {
             zipStream = null;
             bList = null;
         } catch (IOException e) {
-            e.printStackTrace();
+            //e.printStackTrace();
         }
     }
 

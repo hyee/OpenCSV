@@ -49,7 +49,6 @@ public class SQLWriter extends CSVWriter {
                 add(nextElement == null ? "null" : nextElement);
             } else {
                 String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
-
                 Boolean isString = nextElement != null && !this.columnTypes[i].equals("double") && !this.columnTypes[i].equals("boolean");
                 if (isString) {
                     add(quotechar);
@@ -99,22 +98,23 @@ public class SQLWriter extends CSVWriter {
     }
 
     public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws Exception {
-        resultService = new ResultSetHelperService(rs);
-        init(resultService.columnNames, headerEncloser, maxLineWidth);
-        this.columnTypes = resultService.columnTypes;
-        if (asyncMode) {
-            resultService.startAsyncFetch(new RowCallback() {
-                @Override
-                public void execute(Object[] row) throws Exception {
-                    writeNextRow(row);
-                }
-            }, false);
-        } else {
-            Object[] values;
-            while ((values = resultService.getColumnValues()) != null) writeNextRow(values);
+        try(SQLWriter s=this;ResultSetHelperService resultService = new ResultSetHelperService(rs)) {
+            this.resultService=resultService;
+            init(resultService.columnNames, headerEncloser, maxLineWidth);
+            this.columnTypes = resultService.columnTypes;
+            if (asyncMode) {
+                resultService.startAsyncFetch(new RowCallback() {
+                    @Override
+                    public void execute(Object[] row) throws Exception {
+                        writeNextRow(row);
+                    }
+                }, false);
+            } else {
+                Object[] values;
+                while ((values = resultService.getColumnValues()) != null) writeNextRow(values);
+            }
+            return totalRows;
         }
-        close();
-        return totalRows;
     }
 
     public int writeAll2SQL(CSVReader reader) throws IOException {
@@ -133,31 +133,32 @@ public class SQLWriter extends CSVWriter {
     }
 
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
-        String[] array = reader.readNext();
-        String types[] = new String[array.length];
-        for (int i = 0; i < array.length; i++) types[i] = "string";
-        if (resultService != null && resultService.columnNames != null) {
-            ArrayList<String> cols = new ArrayList<String>();
-            for (int j = 0; j < array.length; j++) {
-                boolean match = false;
-                for (int i = 0; i < resultService.columnNames.length; i++)
-                    if (resultService.columnNames[i].equalsIgnoreCase(array[j].trim())) {
-                        array[j] = resultService.columnNames[i];
-                        types[j] = resultService.columnTypes[i];
-                        cols.add(resultService.columnNames[i]);
-                        match = true;
-                    }
-                if (!match) types[j] = null;
+        try(SQLWriter w=this) {
+            String[] array = reader.readNext();
+            String types[] = new String[array.length];
+            for (int i = 0; i < array.length; i++) types[i] = "string";
+            if (resultService != null && resultService.columnNames != null) {
+                ArrayList<String> cols = new ArrayList<String>();
+                for (int j = 0; j < array.length; j++) {
+                    boolean match = false;
+                    for (int i = 0; i < resultService.columnNames.length; i++)
+                        if (resultService.columnNames[i].equalsIgnoreCase(array[j].trim())) {
+                            array[j] = resultService.columnNames[i];
+                            types[j] = resultService.columnTypes[i];
+                            cols.add(resultService.columnNames[i]);
+                            match = true;
+                        }
+                    if (!match) types[j] = null;
+                }
+                createOracleCtlFileFromHeaders(CSVFileName, array, types, reader.getParser().getQuotechar(), reader.seprator, "\\r\\n");
+                array = cols.toArray(new String[cols.size()]);
             }
-            createOracleCtlFileFromHeaders(CSVFileName, array, types, reader.getParser().getQuotechar(), reader.seprator, "\\r\\n");
-            array = cols.toArray(new String[cols.size()]);
+            init(array, headerEncloser, maxLineWidth);
+            this.columnTypes = types;
+            while ((array = reader.readNext()) != null) {
+                writeNextRow(array);
+            }
+            return totalRows;
         }
-        init(array, headerEncloser, maxLineWidth);
-        this.columnTypes = types;
-        while ((array = reader.readNext()) != null) {
-            writeNextRow(array);
-        }
-        close();
-        return totalRows;
     }
 }

@@ -173,7 +173,6 @@ public class CsvToBean<T> extends AbstractCSVToBean {
         }
     }
 
-
     /**
      * Attempt to find custom property editor on descriptor first, else try the propery editor manager.
      *
