@@ -11,7 +11,6 @@ public class SQLWriter extends CSVWriter {
     public static char COLUMN_ENCLOSER = '"';
     public static int maxLineWidth = 1500;
     protected String columns;
-
     private String fileHeader = "";
     private String[] columnTypes;
 
@@ -98,8 +97,8 @@ public class SQLWriter extends CSVWriter {
     }
 
     public int writeAll2SQL(ResultSet rs, String headerEncloser, int maxLineWidth) throws Exception {
-        try(SQLWriter s=this;ResultSetHelperService resultService = new ResultSetHelperService(rs)) {
-            this.resultService=resultService;
+        try (SQLWriter s = this; ResultSetHelperService resultService = new ResultSetHelperService(rs)) {
+            this.resultService = resultService;
             init(resultService.columnNames, headerEncloser, maxLineWidth);
             this.columnTypes = resultService.columnTypes;
             if (asyncMode) {
@@ -133,7 +132,7 @@ public class SQLWriter extends CSVWriter {
     }
 
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
-        try(SQLWriter w=this) {
+        try (SQLWriter w = this) {
             String[] array = reader.readNext();
             String types[] = new String[array.length];
             for (int i = 0; i < array.length; i++) types[i] = "string";

@@ -70,7 +70,6 @@ public class FileBuffer implements Closeable {
                 buffer.order(ByteOrder.nativeOrder());
             }
             if (charset != null) this.charset = Charset.forName(charset);
-
         } catch (IOException e) {
             close();
             throw e;
@@ -168,6 +167,5 @@ public class FileBuffer implements Closeable {
             //e.printStackTrace();
         }
     }
-
 }
 

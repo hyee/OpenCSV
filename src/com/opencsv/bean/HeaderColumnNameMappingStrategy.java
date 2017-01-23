@@ -36,7 +36,6 @@ import java.util.Map;
  *
  * @param <T>
  */
-
 public class HeaderColumnNameMappingStrategy<T> implements MappingStrategy<T> {
     protected String[] header;
     protected Map<String, Integer> indexLookup = new HashMap<String, Integer>();

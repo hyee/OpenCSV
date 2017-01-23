@@ -21,7 +21,6 @@ package com.opencsv.exceptions;
  * @author Andrew Rucker Jones
  */
 public class CsvException extends Exception {
-
     private long lineNumber;
 
     /**
@@ -58,5 +57,4 @@ public class CsvException extends Exception {
     public void setLineNumber(long lineNumber) {
         this.lineNumber = lineNumber;
     }
-
 }

@@ -7,7 +7,6 @@ import java.beans.PropertyEditor;
  * Converts CSV data to objects.
  */
 public abstract class AbstractCSVToBean {
-
     /**
      * Attempt to find custom property editor on descriptor first, else try the propery editor manager.
      *
@@ -53,5 +52,4 @@ public abstract class AbstractCSVToBean {
         }
         return obj;
     }
-
 }

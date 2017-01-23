@@ -28,7 +28,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface CsvBindByName {
-
     /**
      * Whether or not the annotated field is required to be present in every
      * data set of the input.

@@ -29,7 +29,6 @@ import java.io.IOException;
  * @param <T> type of object you are converting the data to.
  */
 public interface MappingStrategy<T> {
-
     /**
      * Implementation will have to return a property descriptor from a bean based on the current column.
      *

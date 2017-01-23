@@ -47,7 +47,6 @@ public class CsvToBean<T> extends AbstractCSVToBean {
      * @param reader - Reader used to construct a CSVReader
      * @return List of Objects.
      */
-
     public List<T> parse(MappingStrategy<T> mapper, Reader reader) {
         return parse(mapper, new CSVReader(reader));
     }

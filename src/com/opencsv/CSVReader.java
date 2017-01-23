@@ -32,10 +32,8 @@ import java.util.List;
  * @author Glen Smith
  */
 public class CSVReader implements Closeable, Iterable<String[]> {
-
     public static final boolean DEFAULT_KEEP_CR = false;
     public static final boolean DEFAULT_VERIFY_READER = true;
-
     /**
      * The default line to start reading.
      */
@@ -50,7 +48,6 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     private boolean linesSkiped;
     private boolean keepCR;
     private boolean verifyReader;
-
     private long linesRead = 0;
     private long recordsRead = 0;
 
@@ -105,7 +102,6 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @param quotechar the character to use for quoted elements
      * @param escape    the character to use for escaping a separator or quote
      */
-
     public CSVReader(Reader reader, char separator, char quotechar, char escape) {
         this(reader, separator, quotechar, escape, DEFAULT_SKIP_LINES, CSVParser.DEFAULT_STRICT_QUOTES);
     }
@@ -254,7 +250,6 @@ public class CSVReader implements Closeable, Iterable<String[]> {
             }
         }
         return allElements;
-
     }
 
     /**

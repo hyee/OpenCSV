@@ -33,7 +33,6 @@ import java.util.Map;
  *
  * @param <T> - class to convert the objects to.
  */
-
 public class IterableCSVToBean<T> extends AbstractCSVToBean implements Iterable<T> {
     private MappingStrategy<T> strategy;
     private CSVReader csvReader;

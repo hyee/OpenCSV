@@ -34,7 +34,6 @@ import java.util.List;
  * @author Kali &lt;kali.tystrit@gmail.com&gt;
  */
 public class BeanToCsv<T> {
-
     /**
      * default constructor.
      */

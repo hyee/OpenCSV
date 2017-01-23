@@ -31,7 +31,6 @@ import com.opencsv.enums.CSVReaderNullFieldIndicator;
  * @see CSVParser
  */
 public class CSVParserBuilder {
-
     private char separator = CSVParser.DEFAULT_SEPARATOR;
     private char quoteChar = CSVParser.DEFAULT_QUOTE_CHARACTER;
     private char escapeChar = CSVParser.DEFAULT_ESCAPE_CHARACTER;

@@ -12,7 +12,6 @@ import java.io.IOException;
  *
  * @param <T> - Type of object that is being processed.
  */
-
 public class ColumnPositionMappingStrategy<T> extends HeaderColumnNameMappingStrategy<T> {
     private String[] columnMapping = new String[]{};
 

@@ -33,7 +33,6 @@ import static com.opencsv.enums.CSVReaderNullFieldIndicator.NEITHER;
  * @author Rainer Pruy
  */
 public class CSVParser {
-
     /**
      * The average size of a line read by openCSV (used for setting the size of StringBuilders).
      */
@@ -374,7 +373,6 @@ public class CSVParser {
                             } else {
                                 sb.append(c);
                             }
-
                         }
                     }
                 }
@@ -391,7 +389,6 @@ public class CSVParser {
                     fromQuotedField = true;
                 }
             }
-
         }
         // line is done - check status
         if ((inQuotes && !ignoreQuotations)) {
@@ -415,7 +412,6 @@ public class CSVParser {
             fromQuotedField = false;
         }
         return tokensOnThisLine.toArray(new String[tokensOnThisLine.size()]);
-
     }
 
     private boolean atStartOfField(StringBuilder sb) {

@@ -37,7 +37,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface CsvDate {
-
     /**
      * A time format string.
      * This must be a string understood by

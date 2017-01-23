@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.opencsv.bean;
 
 /**
@@ -58,7 +57,6 @@ package com.opencsv.bean;
  * </pre>
  */
 public interface CsvToBeanFilter {
-
     /**
      * Determines if a line from the CSV file will be included in the
      * output of {@link CsvToBean}.  If the CSV file has a header row, it
@@ -71,5 +69,4 @@ public interface CsvToBeanFilter {
      * false.
      */
     boolean allowLine(String[] line);
-
 }

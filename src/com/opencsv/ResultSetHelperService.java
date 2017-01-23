@@ -1,11 +1,10 @@
 package com.opencsv;
 
-import com.lmax.disruptor.BlockingWaitStrategy;
-import com.lmax.disruptor.EventFactory;
-import com.lmax.disruptor.EventHandler;
-import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.*;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
+import com.lmax.disruptor.util.DaemonThreadFactory;
+import com.lmax.disruptor.util.Util;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.Closeable;
@@ -14,9 +13,6 @@ import java.lang.reflect.Method;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * Created by Tyler on 30/12/2016.
@@ -24,7 +20,7 @@ import java.util.concurrent.ThreadFactory;
 public class ResultSetHelperService implements Closeable {
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
-    public static int RESULT_FETCH_SIZE = 3000;
+    public static int RESULT_FETCH_SIZE = 30000;
     public static int MAX_FETCH_ROWS = -1;
     public static boolean IS_TRIM = true;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
@@ -36,7 +32,6 @@ public class ResultSetHelperService implements Closeable {
     public int[] columnTypesI;
     public Object[] rowObject;
     public long cost = 0;
-
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat timeTZFormat;
@@ -45,13 +40,17 @@ public class ResultSetHelperService implements Closeable {
     private Method xmlStr;
 
     class Row {
-        private Object[] value;
+        public Object[] value;
+        public boolean seq;
 
-        public Object[] get() {return value;}
-
-        public void set(Object[] value) {this.value = value;}
+        public void set(Object[] value, boolean seq) {
+            this.value = value;
+            this.seq = seq;
+        }
     }
+
     Disruptor<Row> disruptor;
+
     /**
      * Default Constructor.
      */
@@ -230,12 +229,12 @@ public class ResultSetHelperService implements Closeable {
 
     @Override
     public void close() {
-        try{
-        if(rs!=null&&!rs.isClosed())
-            rs.close();
-        if(disruptor!=null) disruptor.shutdown();
+        try {
+            if (rs != null && !rs.isClosed())
+                rs.close();
+            if (disruptor != null) disruptor.shutdown();
         } catch (Exception e) {}
-        disruptor=null;
+        disruptor = null;
     }
 
     /**
@@ -316,14 +315,18 @@ public class ResultSetHelperService implements Closeable {
     }
 
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
-        int bufferSize = RESULT_FETCH_SIZE+10;
+        int bufferSize = RESULT_FETCH_SIZE + 10;
         if (fetchRows > 0) {
-            bufferSize = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE)) + 10;
+            int size = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE));
+            bufferSize = size + 10;
             rs.getStatement().setMaxRows(fetchRows);
+            if (size >= fetchRows / 2 && size < fetchRows)
+                rs.setFetchSize(fetchRows / 2 + 1);
+            else
+                rs.setFetchSize(size);
         }
-        bufferSize = Double.valueOf(Math.pow(2, Math.ceil(Math.log(bufferSize) / Math.log(2)))).intValue();
-        rs.setFetchSize(bufferSize / 2 - 5);
-        // RingBuffer生产工厂,初始化RingBuffer的时候使用
+        bufferSize = Util.ceilingNextPowerOfTwo(bufferSize);
+
         EventFactory<Row> factory = new EventFactory<Row>() {
             @Override
             public Row newInstance() {
@@ -333,42 +336,40 @@ public class ResultSetHelperService implements Closeable {
 
         EventHandler<Row> handler = new EventHandler<Row>() {
             @Override
-            public void onEvent(Row element, long sequence, boolean endOfBatch) throws Exception {
-                Object[] values = element.get();
+            public void onEvent(Row row, long sequence, boolean endOfBatch) throws Exception {
+                Object[] values = row.value;
                 if (values == EOF) return;
-                for (int i = 0; i < columnCount; i++)
-                    values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
+                if (!row.seq) {
+                    for (int i = 0; i < columnCount; i++)
+                        values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
+                    row.seq = true;
+                } else {
+                    callback.execute(values);
+                }
             }
         };
 
-        EventHandler<Row> handler2 = new EventHandler<Row>() {
-            @Override
-            public void onEvent(Row element, long sequence, boolean endOfBatch) throws Exception {
-                Object[] values = element.get();
-                if(values==EOF) return;
-                callback.execute(values);
-            }
-        };
-        disruptor = new Disruptor(factory, bufferSize, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setDaemon(true);
-                return t;
-            }
-        }, ProducerType.SINGLE, new BlockingWaitStrategy());
-        disruptor.handleEventsWith(handler).then(handler2);
-        RingBuffer<Row> ringBuffer = disruptor.start();
+        disruptor = new Disruptor(factory, bufferSize, DaemonThreadFactory.INSTANCE, ProducerType.SINGLE, new BlockingWaitStrategy());
+        disruptor.setDefaultExceptionHandler(new FatalExceptionHandler());
+        disruptor.handleEventsWith(handler).then(handler);
+        final RingBuffer<Row> ringBuffer= disruptor.start();
         while (rs != null && !rs.isClosed()) {
             long sequence = ringBuffer.next();
-            Row o = ringBuffer.get(sequence);
+            Row row = ringBuffer.get(sequence);
             disruptor.getCursor();
-            rowObject = o.get();
-            if(rowObject==null) ringBuffer.get(ringBuffer.getCursor());
-            o.set(getColumnValues() == null ? EOF : rowObject);
+            rowObject = row.value;
+            row.set(getColumnValues() == null ? EOF : rowObject, false);
             ringBuffer.publish(sequence);
         }
         disruptor.shutdown();
+    }
+
+    public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
+        startAsyncFetch(c, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, MAX_FETCH_ROWS);
+    }
+
+    public void startAsyncFetch(final RowCallback c) throws Exception {
+        startAsyncFetch(c, true);
     }
 
     public Object[][] fetchRowsAsync(int rows) throws Exception {
@@ -380,8 +381,7 @@ public class ResultSetHelperService implements Closeable {
                 ary.add(row.clone());
             }
         }, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
-        Object[][] o= ary.toArray(new Object[][]{});
-        return o;
+        return ary.toArray(new Object[][]{});
     }
 
     public Object[][] fetchRows(int rows) throws Exception {
@@ -395,13 +395,5 @@ public class ResultSetHelperService implements Closeable {
             ary.add(row.clone());
         }
         return ary.toArray(new Object[][]{});
-    }
-
-    public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
-        startAsyncFetch(c, trim, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, MAX_FETCH_ROWS);
-    }
-
-    public void startAsyncFetch(final RowCallback c) throws Exception {
-        startAsyncFetch(c, true);
     }
 }

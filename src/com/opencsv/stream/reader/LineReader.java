@@ -12,7 +12,6 @@ import java.io.IOException;
  * <p/>
  * Created by scott on 2/19/15.
  */
-
 public class LineReader {
     private BufferedReader reader;
     private boolean keepCarriageReturns;

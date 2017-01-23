@@ -35,10 +35,8 @@ import com.opencsv.CSVReader;
  * @see IterableCSVToBean
  */
 public class IterableCSVToBeanBuilder<T> {
-
     public static final String NO_MAPPING_STRATEGY_DEFINED = "Unable to instantiate IterableCSVToBeanBuilder because there is no MappingStrategy defined.";
     public static final String NO_READER_DEFINED = "Unable to instantiate IterableCSVToBeanBuilder because there is no CSVReader defined.";
-
     private MappingStrategy<T> mapper;
     private CSVReader csvReader;
     private CsvToBeanFilter filter;

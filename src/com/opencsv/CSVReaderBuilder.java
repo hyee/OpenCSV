@@ -41,7 +41,6 @@ import java.io.Reader;
  * @see CSVReader
  */
 public class CSVReaderBuilder {
-
     private final CSVParserBuilder parserBuilder = new CSVParserBuilder();
     private final Reader reader;
     private int skipLines = CSVReader.DEFAULT_SKIP_LINES;

@@ -29,13 +29,11 @@ import java.util.List;
  * @author Glen Smith
  */
 public class CSVWriter implements Closeable {
-
     public static final String RFC4180_LINE_END = "\r\n";
     /**
      * The character used for escaping quotes.
      */
     public static char DEFAULT_ESCAPE_CHARACTER = '"';
-
     /**
      * The quote constant to use when you wish to suppress all quoting.
      */
@@ -49,7 +47,6 @@ public class CSVWriter implements Closeable {
      */
     public static String DEFAULT_LINE_END = "\n";
     public static int INITIAL_BUFFER_SIZE = 8 << 20; //8 MB
-
     protected char separator;
     protected char quotechar;
     protected char escapechar;
@@ -205,7 +202,7 @@ public class CSVWriter implements Closeable {
      *                         quote or new line characters.
      */
     public int writeAll(List<String[]> allLines, boolean applyQuotesToAll) throws IOException {
-        try(CSVWriter c=this) {
+        try (CSVWriter c = this) {
             for (String[] line : allLines) {
                 writeNext(line, applyQuotesToAll);
             }
@@ -221,7 +218,7 @@ public class CSVWriter implements Closeable {
      *                 the file.
      */
     public int writeAll(List<String[]> allLines) throws IOException {
-        return writeAll(allLines,false);
+        return writeAll(allLines, false);
     }
 
     /**
@@ -259,13 +256,14 @@ public class CSVWriter implements Closeable {
      * @throws java.sql.SQLException thrown by getColumnValue
      */
     public int writeAll(java.sql.ResultSet rs, boolean includeColumnNames, boolean trim) throws Exception {
-        try(CSVWriter c=this;ResultSetHelperService resultService = new ResultSetHelperService(rs)){
-            this.resultService=resultService;
+        try (CSVWriter c = this; ResultSetHelperService resultService = new ResultSetHelperService(rs)) {
+            this.resultService = resultService;
             titles = new String[resultService.columnNames.length];
             for (int i = 0; i < titles.length; i++) titles[i] = resultService.columnNames[i].trim().toUpperCase();
             if (includeColumnNames) {
                 writeColumnNames();
-                if (CSVFileName != null) createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, resultService.columnTypes, quotechar, separator, null);
+                if (CSVFileName != null)
+                    createOracleCtlFileFromHeaders(CSVFileName, resultService.columnNames, resultService.columnTypes, quotechar, separator, null);
             }
 
             if (asyncMode) {
@@ -372,7 +370,6 @@ public class CSVWriter implements Closeable {
      *
      * @throws IOException if bad things happen
      */
-
     /**
      * Close the underlying stream writer flushing any buffered content.
      *
@@ -434,7 +431,6 @@ public class CSVWriter implements Closeable {
      * either on the underlying output stream or during a format
      * conversion.
      */
-
     /**
      * Sets the result service.
      *
@@ -447,5 +443,4 @@ public class CSVWriter implements Closeable {
     /**
      * flushes the writer without throwing any exceptions.
      */
-
 }
