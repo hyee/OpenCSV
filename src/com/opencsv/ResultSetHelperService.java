@@ -5,11 +5,15 @@ import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 import com.lmax.disruptor.util.Util;
+import sun.misc.FloatingDecimal;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -209,14 +213,11 @@ public class ResultSetHelperService implements Closeable {
                     o = rs.getObject(i + 1);
                     if (!rs.wasNull() && columnTypesI[i] == 2009) {//Oracle XMLType
                         try {
-                            Class clz = o.getClass();
-                            if (xmlStr == null) xmlStr = clz.getDeclaredMethod("getStringVal");
+                            if (xmlStr == null) xmlStr = o.getClass().getDeclaredMethod("getStringVal");
                             o = xmlStr.invoke(o);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                    } else if (o != null && columnTypes[i].equals("int")) {
-                        o = Integer.valueOf(o.toString());
                     }
             }
             if (o != null && rs.wasNull()) o = null;
@@ -285,12 +286,27 @@ public class ResultSetHelperService implements Closeable {
             case "boolean":
                 return o;
             case "int":
-                return Integer.valueOf(o.toString());
+                return ((Number)o).intValue();
             case "double":
             case "long":
-                str = o.toString();
-                //return Double.valueOf(str);
-                return str;
+                switch (o.getClass().getSimpleName()) {
+                    case "Double":
+                        return o;
+                    case "Float":
+                        return new FloatingDecimal((Float)o).doubleValue();
+                    case "BigInteger":
+                        Integer i=((BigInteger)o).intValue();
+                        if(o.toString().equals(new BigInteger(i.toString()))) return i;
+                        Double d1=((BigInteger)o).doubleValue();
+                        if(o.toString().equals(new BigInteger(d1.toString()))) return d1;
+                        return o;
+                    case "BigDecimal":
+                        Double d=((BigDecimal)o).doubleValue();
+                        if(o.toString().equals(new BigDecimal(d).toString())) return d;
+                        return o;
+                    default:
+                        return ((Number)o).doubleValue();
+                }
             case "date":
             case "time":
                 str = handleDate((Date) o, dateFormatString);

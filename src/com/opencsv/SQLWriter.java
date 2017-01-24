@@ -47,7 +47,7 @@ public class SQLWriter extends CSVWriter {
                 String nextElement = remaps.get(titles[i]);
                 add(nextElement == null ? "null" : nextElement);
             } else {
-                String nextElement = nextLine[i] == null ? null : (String) nextLine[i];
+                String nextElement = nextLine[i] == null ? null : nextLine[i].toString();
                 Boolean isString = nextElement != null && !this.columnTypes[i].equals("double") && !this.columnTypes[i].equals("boolean");
                 if (isString) {
                     add(quotechar);
