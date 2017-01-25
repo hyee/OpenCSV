@@ -5,7 +5,6 @@ import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 import com.lmax.disruptor.util.Util;
-import sun.misc.FloatingDecimal;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.Closeable;
@@ -13,7 +12,6 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.MathContext;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -231,8 +229,7 @@ public class ResultSetHelperService implements Closeable {
     @Override
     public void close() {
         try {
-            if (rs != null && !rs.isClosed())
-                rs.close();
+            if (rs != null && !rs.isClosed()) rs.close();
             if (disruptor != null) disruptor.shutdown();
         } catch (Exception e) {}
         disruptor = null;
@@ -286,26 +283,25 @@ public class ResultSetHelperService implements Closeable {
             case "boolean":
                 return o;
             case "int":
-                return ((Number)o).intValue();
+                return ((Number) o).intValue();
             case "double":
             case "long":
+                Double d = ((Number) o).doubleValue();
                 switch (o.getClass().getSimpleName()) {
                     case "Double":
                         return o;
                     case "Float":
-                        return new FloatingDecimal((Float)o).doubleValue();
+                        return Double.valueOf(o.toString());
                     case "BigInteger":
-                        Integer i=((BigInteger)o).intValue();
-                        if(o.toString().equals(new BigInteger(i.toString()))) return i;
-                        Double d1=((BigInteger)o).doubleValue();
-                        if(o.toString().equals(new BigInteger(d1.toString()))) return d1;
+                        Integer i = ((BigInteger) o).intValue();
+                        if (o.toString().equals(new BigInteger(d.toString()))) return i;
+                        if (o.toString().equals(new BigInteger(d.toString()))) return d;
                         return o;
                     case "BigDecimal":
-                        Double d=((BigDecimal)o).doubleValue();
-                        if(o.toString().equals(new BigDecimal(d).toString())) return d;
+                        if (o.toString().equals(new BigDecimal(d).toString())) return d;
                         return o;
                     default:
-                        return ((Number)o).doubleValue();
+                        return d;
                 }
             case "date":
             case "time":
@@ -336,10 +332,8 @@ public class ResultSetHelperService implements Closeable {
             int size = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE));
             bufferSize = size + 10;
             rs.getStatement().setMaxRows(fetchRows);
-            if (size >= fetchRows / 2 && size < fetchRows)
-                rs.setFetchSize(fetchRows / 2 + 1);
-            else
-                rs.setFetchSize(size);
+            if (size >= fetchRows / 2 && size < fetchRows) rs.setFetchSize(fetchRows / 2 + 1);
+            else rs.setFetchSize(size);
         }
         bufferSize = Util.ceilingNextPowerOfTwo(bufferSize);
 
@@ -368,7 +362,7 @@ public class ResultSetHelperService implements Closeable {
         disruptor = new Disruptor(factory, bufferSize, DaemonThreadFactory.INSTANCE, ProducerType.SINGLE, new BlockingWaitStrategy());
         disruptor.setDefaultExceptionHandler(new FatalExceptionHandler());
         disruptor.handleEventsWith(handler).then(handler);
-        final RingBuffer<Row> ringBuffer= disruptor.start();
+        final RingBuffer<Row> ringBuffer = disruptor.start();
         while (rs != null && !rs.isClosed()) {
             long sequence = ringBuffer.next();
             Row row = ringBuffer.get(sequence);
