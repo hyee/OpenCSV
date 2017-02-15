@@ -372,6 +372,7 @@ public class ResultSetHelperService implements Closeable {
             ringBuffer.publish(sequence);
         }
         disruptor.shutdown();
+        Thread.sleep(200);
     }
 
     public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {

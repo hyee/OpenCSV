@@ -101,6 +101,7 @@ public class FileBuffer implements Closeable {
 
     public FileBuffer write(byte[] bytes, int startPos) throws IOException {
         for (byte b : bytes) {
+            if(bList==null) return this;
             bList[bLen++] = b;
             fill(false);
         }
@@ -112,6 +113,7 @@ public class FileBuffer implements Closeable {
     }
 
     public FileBuffer write(char c) throws IOException {
+        if(bList==null) return this;
         bList[bLen++] = (byte) c;
         fill(false);
         return this;
