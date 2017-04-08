@@ -24,7 +24,7 @@ public class ResultSetHelperService implements Closeable {
     // These types don't exist in Java 5
     public static int RESULT_FETCH_SIZE = 30000;
     public static int MAX_FETCH_ROWS = -1;
-    public static boolean IS_TRIM = true;
+    public static boolean IS_TRIM = false;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
     public int columnCount;
@@ -380,7 +380,7 @@ public class ResultSetHelperService implements Closeable {
     }
 
     public void startAsyncFetch(final RowCallback c) throws Exception {
-        startAsyncFetch(c, true);
+        startAsyncFetch(c, IS_TRIM);
     }
 
     public Object[][] fetchRowsAsync(int rows) throws Exception {
