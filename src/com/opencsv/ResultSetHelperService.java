@@ -15,6 +15,7 @@ import java.math.BigInteger;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Created by Tyler on 30/12/2016.
@@ -343,19 +344,31 @@ public class ResultSetHelperService implements Closeable {
                 return new Row();
             }
         };
-
-        EventHandler<Row> handler = new EventHandler<Row>() {
+        final CountDownLatch startLatch = new CountDownLatch(2);
+        EventHandler<Row> handler = new RowHandler<Row>() {
             @Override
             public void onEvent(Row row, long sequence, boolean endOfBatch) throws Exception {
                 Object[] values = row.value;
-                if (values == EOF) return;
-                if (!row.seq) {
-                    for (int i = 0; i < columnCount; i++)
-                        values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
-                    row.seq = true;
-                } else {
-                    callback.execute(values);
-                }
+                    if (values == EOF) return;
+                    if (!row.seq) {
+                        for (int i = 0; i < columnCount; i++)
+                            values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
+                        row.seq = true;
+                    } else {
+                        callback.execute(values);
+                    }
+
+            }
+
+            @Override
+            public void onStart()
+            {
+                startLatch.countDown();
+            }
+
+            @Override
+            public void onShutdown() {
+
             }
         };
 
@@ -363,6 +376,7 @@ public class ResultSetHelperService implements Closeable {
         disruptor.setDefaultExceptionHandler(new FatalExceptionHandler());
         disruptor.handleEventsWith(handler).then(handler);
         final RingBuffer<Row> ringBuffer = disruptor.start();
+        startLatch.await();
         while (rs != null && !rs.isClosed()) {
             long sequence = ringBuffer.next();
             Row row = ringBuffer.get(sequence);
@@ -371,8 +385,8 @@ public class ResultSetHelperService implements Closeable {
             row.set(getColumnValues() == null ? EOF : rowObject, false);
             ringBuffer.publish(sequence);
         }
+
         disruptor.shutdown();
-        Thread.sleep(200);
     }
 
     public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
@@ -407,4 +421,6 @@ public class ResultSetHelperService implements Closeable {
         }
         return ary.toArray(new Object[][]{});
     }
+
+
 }
