@@ -14,6 +14,9 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 
@@ -27,7 +30,7 @@ public class ResultSetHelperService implements Closeable {
     public static int MAX_FETCH_ROWS = -1;
     public static boolean IS_TRIM = false;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.S";
+    public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
     public int columnCount;
     public String[] columnNames;
     public String[] columnTypes;
@@ -37,7 +40,8 @@ public class ResultSetHelperService implements Closeable {
     public long cost = 0;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
-    private SimpleDateFormat timeTZFormat;
+    private DateTimeFormatter timeTZFormat;
+    private SimpleDateFormat timeTZFormat2;
     private ResultSet rs;
     private Object[] EOF = new Object[1];
     private Method xmlStr;
@@ -188,6 +192,12 @@ public class ResultSetHelperService implements Closeable {
             }
             switch (columnTypes[i]) {
                 case "timestamptz":
+                    try {
+                        o=rs.getObject(i+1,ZonedDateTime.class);
+                    } catch (NullPointerException ex) {
+                        o = rs.getObject(i + 1, OffsetDateTime.class);
+                    }
+                    break;
                 case "timestamp":
                     o = rs.getTimestamp(i + 1);
                     break;
@@ -267,11 +277,14 @@ public class ResultSetHelperService implements Closeable {
         return result;
     }
 
-    protected String handleTimestampTZ(Timestamp timestamp, String timestampFormatString) {
+    protected String handleTimestampTZ(Object timestamp, String timestampFormatString) {
         if (timeTZFormat == null) {
-            timeTZFormat = new SimpleDateFormat(timestampFormatString + " X");
+            timeTZFormat = DateTimeFormatter.ofPattern(timestampFormatString + " X");
         }
-        return timestamp == null ? null : timeTZFormat.format(timestamp);
+        if(timestamp==null) return null;
+
+        if(timestamp instanceof OffsetDateTime) return ((OffsetDateTime)timestamp).format(timeTZFormat);
+        return ((ZonedDateTime)timestamp).format(timeTZFormat);
     }
 
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
@@ -316,7 +329,7 @@ public class ResultSetHelperService implements Closeable {
                 }
                 break;
             case "timestamptz":
-                str = handleTimestampTZ((Timestamp) o, timestampFormatString);
+                str = handleTimestampTZ(o, timestampFormatString);
                 break;
             case "longraw":
                 str = DatatypeConverter.printHexBinary((byte[]) o);
