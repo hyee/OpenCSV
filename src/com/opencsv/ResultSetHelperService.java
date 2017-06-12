@@ -41,10 +41,8 @@ public class ResultSetHelperService implements Closeable {
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
     private DateTimeFormatter timeTZFormat;
-    private SimpleDateFormat timeTZFormat2;
     private ResultSet rs;
     private Object[] EOF = new Object[1];
-    private Method xmlStr;
 
     class Row {
         public Object[] value;
@@ -128,6 +126,9 @@ public class ResultSetHelperService implements Closeable {
                     break;
                 case Types.BLOB:
                     value = "blob";
+                    break;
+                case Types.SQLXML:
+                    value = "xml";
                     break;
                 default:
                     value = "string";
@@ -218,16 +219,13 @@ public class ResultSetHelperService implements Closeable {
                         c.free();
                     } else o = null;
                     break;
+                case "xml":
+                    SQLXML x=rs.getSQLXML(i+1);
+                    if(x!=null) o=x.getString();
+                    else o=null;
+                    break;
                 default:
                     o = rs.getObject(i + 1);
-                    if (!rs.wasNull() && columnTypesI[i] == 2009) {//Oracle XMLType
-                        try {
-                            if (xmlStr == null) xmlStr = o.getClass().getDeclaredMethod("getStringVal");
-                            o = xmlStr.invoke(o);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
             }
             if (o != null && rs.wasNull()) o = null;
             if (disruptor == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
