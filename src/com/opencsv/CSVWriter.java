@@ -402,7 +402,7 @@ public class CSVWriter implements Closeable {
         b.append("BADFILE     ").append(buffer.fileName).append(".bad\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
-        b.append("FIELDS TERMINATED BY ").append(toHexIfInvisible(separator));
+        b.append("FIELDS CSV TERMINATED BY ").append(toHexIfInvisible(separator));
         b.append(" OPTIONALLY ENCLOSED BY ").append(toHexIfInvisible(encloser)).append(" AND ").append(toHexIfInvisible(encloser)).append(" TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase())) continue;

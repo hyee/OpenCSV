@@ -220,9 +220,14 @@ public class ResultSetHelperService implements Closeable {
                     } else o = null;
                     break;
                 case "xml":
-                    SQLXML x=rs.getSQLXML(i+1);
-                    if(x!=null) o=x.getString();
-                    else o=null;
+                    SQLXML x = rs.getSQLXML(i + 1);
+                    try {
+
+                        if (x != null) o = x.getString();
+                        else o = null;
+                    } catch (Exception e) {
+                        o = rs.getObject(i + 1);
+                    }
                     break;
                 default:
                     o = rs.getObject(i + 1);
