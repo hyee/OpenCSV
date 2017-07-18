@@ -1,15 +1,8 @@
 package com.opencsv;
 
-import com.lmax.disruptor.*;
-import com.lmax.disruptor.dsl.Disruptor;
-import com.lmax.disruptor.dsl.ProducerType;
-import com.lmax.disruptor.util.DaemonThreadFactory;
-import com.lmax.disruptor.util.Util;
-
 import javax.xml.bind.DatatypeConverter;
 import java.io.Closeable;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
@@ -18,7 +11,7 @@ import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Created by Tyler on 30/12/2016.
@@ -43,18 +36,8 @@ public class ResultSetHelperService implements Closeable {
     private DateTimeFormatter timeTZFormat;
     private ResultSet rs;
     private Object[] EOF = new Object[1];
-
-    class Row {
-        public Object[] value;
-        public boolean seq;
-
-        public void set(Object[] value, boolean seq) {
-            this.value = value;
-            this.seq = seq;
-        }
-    }
-
-    Disruptor<Row> disruptor;
+    private ArrayBlockingQueue<Object[]> queue;
+    private boolean isFinished = false;
 
     /**
      * Default Constructor.
@@ -66,7 +49,8 @@ public class ResultSetHelperService implements Closeable {
         RESULT_FETCH_SIZE = fetchSize;
         try {
             rs.setFetchDirection(ResultSet.FETCH_FORWARD);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+        }
         ResultSetMetaData metadata = rs.getMetaData();
         columnCount = metadata.getColumnCount();
         columnNames = new String[columnCount];
@@ -182,6 +166,7 @@ public class ResultSetHelperService implements Closeable {
         if (rs == null || rs.isClosed() || !rs.next()) {
             if (rs != null) rs.close();
             cost += System.nanoTime() - sec;
+            isFinished = true;
             return null;
         }
         if (rowObject == null) rowObject = new Object[columnCount];
@@ -194,13 +179,13 @@ public class ResultSetHelperService implements Closeable {
             switch (columnTypes[i]) {
                 case "timestamptz":
                     try {
-                        o=rs.getObject(i+1,ZonedDateTime.class);
+                        o = rs.getObject(i + 1, ZonedDateTime.class);
                     } catch (NullPointerException ex) {
                         o = rs.getObject(i + 1, OffsetDateTime.class);
                     }
                     break;
                 case "timestamp":
-                    o = rs.getTimestamp(i + 1);
+                    o = rs.getObject(i + 1, Timestamp.class);
                     break;
                 case "raw":
                     o = rs.getString(i + 1);
@@ -233,7 +218,7 @@ public class ResultSetHelperService implements Closeable {
                     o = rs.getObject(i + 1);
             }
             if (o != null && rs.wasNull()) o = null;
-            if (disruptor == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
+            if (queue == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
             else rowObject[i] = o;
         }
         cost += System.nanoTime() - sec;
@@ -244,9 +229,9 @@ public class ResultSetHelperService implements Closeable {
     public void close() {
         try {
             if (rs != null && !rs.isClosed()) rs.close();
-            if (disruptor != null) disruptor.shutdown();
-        } catch (Exception e) {}
-        disruptor = null;
+        } catch (Exception e) {
+        }
+        queue = null;
     }
 
     /**
@@ -284,10 +269,10 @@ public class ResultSetHelperService implements Closeable {
         if (timeTZFormat == null) {
             timeTZFormat = DateTimeFormatter.ofPattern(timestampFormatString + " X");
         }
-        if(timestamp==null) return null;
+        if (timestamp == null) return null;
 
-        if(timestamp instanceof OffsetDateTime) return ((OffsetDateTime)timestamp).format(timeTZFormat);
-        return ((ZonedDateTime)timestamp).format(timeTZFormat);
+        if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
+        return ((ZonedDateTime) timestamp).format(timeTZFormat);
     }
 
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
@@ -325,10 +310,15 @@ public class ResultSetHelperService implements Closeable {
                 str = handleDate((Date) o, dateFormatString);
                 break;
             case "timestamp":
-                str = handleTimestamp((Timestamp) o, timestampFormatString);
-                if (columnClassName[colIndex].startsWith("oracle.sql.DATE")) {
-                    int pos = str.lastIndexOf('.');
-                    if (pos > 0) str = str.substring(0, pos - 1);
+                try {
+                    str = handleTimestamp((Timestamp) o, timestampFormatString);
+                    if (columnClassName[colIndex].startsWith("oracle.sql.DATE")) {
+                        int pos = str.lastIndexOf('.');
+                        if (pos > 0) str = str.substring(0, pos - 1);
+                    }
+                } catch (Exception e) {
+                    System.out.println(o + ":" + colIndex + ":" + columnClassName[colIndex] + ":" + columnNames[colIndex]);
+                    throw e;
                 }
                 break;
             case "timestamptz":
@@ -344,65 +334,43 @@ public class ResultSetHelperService implements Closeable {
     }
 
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
-        int bufferSize = RESULT_FETCH_SIZE + 10;
+        if (fetchRows == -1) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         if (fetchRows > 0) {
             int size = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE));
-            bufferSize = size + 10;
             rs.getStatement().setMaxRows(fetchRows);
             if (size >= fetchRows / 2 && size < fetchRows) rs.setFetchSize(fetchRows / 2 + 1);
             else rs.setFetchSize(size);
-        }
-        bufferSize = Util.ceilingNextPowerOfTwo(bufferSize);
+            queue = new ArrayBlockingQueue<>(rs.getFetchSize() * 2 + 10);
+        } else queue = new ArrayBlockingQueue<>(200);
 
-        EventFactory<Row> factory = new EventFactory<Row>() {
+        Thread t = new Thread(new Runnable() {
             @Override
-            public Row newInstance() {
-                return new Row();
-            }
-        };
-        final CountDownLatch startLatch = new CountDownLatch(2);
-        EventHandler<Row> handler = new RowHandler<Row>() {
-            @Override
-            public void onEvent(Row row, long sequence, boolean endOfBatch) throws Exception {
-                Object[] values = row.value;
-                    if (values == EOF) return;
-                    if (!row.seq) {
-                        for (int i = 0; i < columnCount; i++)
-                            values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
-                        row.seq = true;
-                    } else {
-                        callback.execute(values);
+            public void run() {
+                try {
+                    while (queue != null && !isFinished && (rowObject = new Object[columnCount]) != null)
+                        queue.put(getColumnValues() == null ? EOF : rowObject);
+                } catch (NullPointerException e0) {
+                } catch (Exception e) {
+                    try {
+                        if (queue != null) queue.put(EOF);
+                    } catch (Exception e1) {
                     }
-
+                    if (e.getMessage().toLowerCase().indexOf("closed") == -1) e.printStackTrace();
+                }
             }
+        });
+        t.setDaemon(true);
+        t.start();
 
-            @Override
-            public void onStart()
-            {
-                startLatch.countDown();
-            }
-
-            @Override
-            public void onShutdown() {
-
-            }
-        };
-
-        disruptor = new Disruptor(factory, bufferSize, DaemonThreadFactory.INSTANCE, ProducerType.SINGLE, new BlockingWaitStrategy());
-        disruptor.setDefaultExceptionHandler(new FatalExceptionHandler());
-        disruptor.handleEventsWith(handler).then(handler);
-        final RingBuffer<Row> ringBuffer = disruptor.start();
-        startLatch.await();
-        while (rs != null && !rs.isClosed()) {
-            long sequence = ringBuffer.next();
-            Row row = ringBuffer.get(sequence);
-            disruptor.getCursor();
-            rowObject = row.value;
-            row.set(getColumnValues() == null ? EOF : rowObject, false);
-            ringBuffer.publish(sequence);
+        Object[] values;
+        int count = 0;
+        while ((values = queue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
+            for (int i = 0; i < columnCount; i++)
+                values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
+            callback.execute(values);
         }
-
-        disruptor.shutdown();
+        queue = null;
+        t.join();
     }
 
     public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
@@ -426,10 +394,11 @@ public class ResultSetHelperService implements Closeable {
     }
 
     public Object[][] fetchRows(int rows) throws Exception {
-        disruptor = null;
+        queue = null;
         final ArrayList<Object[]> ary = new ArrayList();
         Object[] row;
         int counter = 0;
+        if(rows>0) rs.setFetchSize(rows<=1000?rows:rows/2);
         while (rows < 0 || ++counter <= rows) {
             row = getColumnValues();
             if (row == null) break;
@@ -437,6 +406,4 @@ public class ResultSetHelperService implements Closeable {
         }
         return ary.toArray(new Object[][]{});
     }
-
-
 }
