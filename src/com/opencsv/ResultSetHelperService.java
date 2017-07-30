@@ -33,6 +33,7 @@ public class ResultSetHelperService implements Closeable {
     public long cost = 0;
     private SimpleDateFormat dateFormat;
     private SimpleDateFormat timeFormat;
+    private SimpleDateFormat TimeTZFormat1;
     private DateTimeFormatter timeTZFormat;
     private ResultSet rs;
     private Object[] EOF = new Object[1];
@@ -180,8 +181,12 @@ public class ResultSetHelperService implements Closeable {
                 case "timestamptz":
                     try {
                         o = rs.getObject(i + 1, ZonedDateTime.class);
-                    } catch (NullPointerException ex) {
-                        o = rs.getObject(i + 1, OffsetDateTime.class);
+                    } catch (Exception ex) {
+                        try {
+                            o = rs.getObject(i + 1, OffsetDateTime.class);
+                        } catch (Exception ex1) {
+                            o = rs.getObject(i + 1, Timestamp.class);
+                        }
                     }
                     break;
                 case "timestamp":
@@ -268,10 +273,12 @@ public class ResultSetHelperService implements Closeable {
     protected String handleTimestampTZ(Object timestamp, String timestampFormatString) {
         if (timeTZFormat == null) {
             timeTZFormat = DateTimeFormatter.ofPattern(timestampFormatString + " X");
+            TimeTZFormat1 = new SimpleDateFormat(timestampFormatString + " X");
         }
         if (timestamp == null) return null;
 
         if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
+        else if (timestamp instanceof Timestamp) return TimeTZFormat1.format((Timestamp) timestamp);
         return ((ZonedDateTime) timestamp).format(timeTZFormat);
     }
 
@@ -335,7 +342,7 @@ public class ResultSetHelperService implements Closeable {
 
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
         if (fetchRows == -1) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
-        if (fetchRows > 0) {
+        else if (fetchRows > 0) {
             int size = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE));
             rs.getStatement().setMaxRows(fetchRows);
             if (size >= fetchRows / 2 && size < fetchRows) rs.setFetchSize(fetchRows / 2 + 1);
@@ -398,7 +405,7 @@ public class ResultSetHelperService implements Closeable {
         final ArrayList<Object[]> ary = new ArrayList();
         Object[] row;
         int counter = 0;
-        if(rows>0) rs.setFetchSize(rows<=1000?rows:rows/2);
+        if (rows > 0) rs.setFetchSize(rows <= 1000 ? rows : rows / 2);
         while (rows < 0 || ++counter <= rows) {
             row = getColumnValues();
             if (row == null) break;
