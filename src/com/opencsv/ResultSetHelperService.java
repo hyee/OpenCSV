@@ -266,6 +266,7 @@ public class ResultSetHelperService implements Closeable {
         if (timestamp != null) {
             result = timeFormat.format(timestamp);
             if (result.endsWith(".0")) result = result.substring(0, result.length() - 2);
+            else if(result.endsWith(".000")) result = result.substring(0, result.length() - 4);
         }
         return result;
     }
@@ -295,22 +296,21 @@ public class ResultSetHelperService implements Closeable {
                 return ((Number) o).intValue();
             case "double":
             case "long":
-                Double d = ((Number) o).doubleValue();
+                double d = ((Number) o).doubleValue();
                 switch (o.getClass().getSimpleName()) {
-                    case "Double":
-                        return o;
                     case "Float":
-                        return Double.valueOf(o.toString());
+                        d = Double.valueOf(o.toString());
+                    case "Double":
+                        return d == (int) d ? (int) d : d;
                     case "BigInteger":
-                        Integer i = ((BigInteger) o).intValue();
-                        if (o.toString().equals(new BigInteger(d.toString()))) return i;
-                        if (o.toString().equals(new BigInteger(d.toString()))) return d;
+                        if (o.toString().equals(new BigInteger(String.valueOf((int) d)))) return (int) d;
                         return o;
                     case "BigDecimal":
+                        if (o.toString().equals(new BigDecimal((int) d).toString())) return (int) d;
                         if (o.toString().equals(new BigDecimal(d).toString())) return d;
                         return o;
                     default:
-                        return d;
+                        return d == (int) d ? (int) d : d;
                 }
             case "date":
             case "time":
@@ -340,6 +340,8 @@ public class ResultSetHelperService implements Closeable {
         return trim ? str.trim() : str;
     }
 
+    private volatile Exception exception = null;
+
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
         if (fetchRows == -1) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         else if (fetchRows > 0) {
@@ -349,7 +351,7 @@ public class ResultSetHelperService implements Closeable {
             else rs.setFetchSize(size);
             queue = new ArrayBlockingQueue<>(rs.getFetchSize() * 2 + 10);
         } else queue = new ArrayBlockingQueue<>(200);
-
+        exception = null;
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -362,7 +364,7 @@ public class ResultSetHelperService implements Closeable {
                         if (queue != null) queue.put(EOF);
                     } catch (Exception e1) {
                     }
-                    if (e.getMessage().toLowerCase().indexOf("closed") == -1) e.printStackTrace();
+                    exception = e;
                 }
             }
         });
@@ -378,6 +380,7 @@ public class ResultSetHelperService implements Closeable {
         }
         queue = null;
         t.join();
+        if (exception != null) throw exception;
     }
 
     public void startAsyncFetch(final RowCallback c, boolean trim) throws Exception {
