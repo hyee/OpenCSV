@@ -19,7 +19,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 public class ResultSetHelperService implements Closeable {
     // note: we want to maintain compatibility with Java 5 VM's
     // These types don't exist in Java 5
-    public static int RESULT_FETCH_SIZE = 30000;
+    public static int RESULT_FETCH_SIZE = 10000;
     public static int MAX_FETCH_ROWS = -1;
     public static boolean IS_TRIM = false;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
@@ -65,6 +65,7 @@ public class ResultSetHelperService implements Closeable {
                 case Types.JAVA_OBJECT:
                     value = "object";
                     break;
+                case Types.BIT:
                 case Types.BOOLEAN:
                     value = "boolean";
                     break;
@@ -78,7 +79,7 @@ public class ResultSetHelperService implements Closeable {
                 case Types.BIGINT:
                     value = "long";
                     break;
-                case Types.BIT:
+//               case Types.BIT:
                 case Types.INTEGER:
                 case Types.TINYINT:
                 case Types.SMALLINT:
@@ -266,7 +267,7 @@ public class ResultSetHelperService implements Closeable {
         if (timestamp != null) {
             result = timeFormat.format(timestamp);
             if (result.endsWith(".0")) result = result.substring(0, result.length() - 2);
-            else if(result.endsWith(".000")) result = result.substring(0, result.length() - 4);
+            else if (result.endsWith(".000")) result = result.substring(0, result.length() - 4);
         }
         return result;
     }
@@ -286,6 +287,7 @@ public class ResultSetHelperService implements Closeable {
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return null;
         String str;
+        double d;
         switch (columnTypes[colIndex]) {
             case "object":
                 str = handleObject(o);
@@ -296,22 +298,24 @@ public class ResultSetHelperService implements Closeable {
                 return ((Number) o).intValue();
             case "double":
             case "long":
-                double d = ((Number) o).doubleValue();
-                switch (o.getClass().getSimpleName()) {
-                    case "Float":
-                        d = Double.valueOf(o.toString());
-                    case "Double":
-                        return d == (int) d ? (int) d : d;
-                    case "BigInteger":
-                        if (o.toString().equals(new BigInteger(String.valueOf((int) d)))) return (int) d;
-                        return o;
-                    case "BigDecimal":
-                        if (o.toString().equals(new BigDecimal((int) d).toString())) return (int) d;
-                        if (o.toString().equals(new BigDecimal(d).toString())) return d;
-                        return o;
-                    default:
-                        return d == (int) d ? (int) d : d;
-                }
+                str = o.getClass().getSimpleName();
+                if (str.equals(columnTypes[colIndex])) str = Character.toUpperCase(str.charAt(0)) + str.substring(1);
+                columnTypes[colIndex] = str;
+                return getColumnValue(o, colIndex, trim, dateFormatString, timestampFormatString);
+            case "Double":
+                d = ((Number) o).doubleValue();
+                return d == (int) d ? (int) d : d;
+            case "Float":
+                return Double.valueOf(o.toString());
+            case "BigInteger":
+                d = ((Number) o).doubleValue();
+                if (o.toString().equals(new BigInteger(String.valueOf((int) d)))) return (int) d;
+                return o;
+            case "BigDecimal":
+                d = ((Number) o).doubleValue();
+                if (d == (int) d && o.toString().equals(new BigDecimal((int) d).toString())) return (int) d;
+                if (o.toString().equals(new BigDecimal(d).toString())) return d;
+                return o;
             case "date":
             case "time":
                 str = handleDate((Date) o, dateFormatString);
@@ -335,6 +339,10 @@ public class ResultSetHelperService implements Closeable {
                 str = DatatypeConverter.printHexBinary((byte[]) o);
                 break;
             default:
+                if (o instanceof Number) {
+                    d = ((Number) o).doubleValue();
+                    return d == (int) d ? (int) d : d;
+                }
                 str = o.toString();
         }
         return trim ? str.trim() : str;
@@ -345,12 +353,12 @@ public class ResultSetHelperService implements Closeable {
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
         if (fetchRows == -1) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
         else if (fetchRows > 0) {
-            int size = Math.max(200, Math.min(fetchRows, RESULT_FETCH_SIZE));
+            int size = Math.max(256, Math.min(fetchRows, RESULT_FETCH_SIZE));
             rs.getStatement().setMaxRows(fetchRows);
             if (size >= fetchRows / 2 && size < fetchRows) rs.setFetchSize(fetchRows / 2 + 1);
             else rs.setFetchSize(size);
             queue = new ArrayBlockingQueue<>(rs.getFetchSize() * 2 + 10);
-        } else queue = new ArrayBlockingQueue<>(200);
+        } else queue = new ArrayBlockingQueue<>(256);
         exception = null;
         Thread t = new Thread(new Runnable() {
             @Override

@@ -31,14 +31,14 @@ package com.opencsv.bean;
  *
  * 	public NonProductionFilter(MappingStrategy strategy) {
  * 		this.strategy = strategy;
- * 	}
+ *    }
  *
  * 	public boolean allowLine(String[] line) {
  * 		int index = strategy.getColumnIndex("STATE");
  * 		String value = line[index];
  * 		boolean result = !"production".equals(value);
  * 		return result;
- * 	}
+ *    }
  *
  * }
  *
