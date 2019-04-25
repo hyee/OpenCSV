@@ -39,6 +39,7 @@ public class ResultSetHelperService implements Closeable {
     private Object[] EOF = new Object[1];
     private ArrayBlockingQueue<Object[]> queue;
     private boolean isFinished = false;
+    private static volatile boolean isAborted = false;
 
     /**
      * Default Constructor.
@@ -48,6 +49,7 @@ public class ResultSetHelperService implements Closeable {
         rs = res;
         rs.setFetchSize(fetchSize);
         RESULT_FETCH_SIZE = fetchSize;
+        isAborted = false;
         try {
             rs.setFetchDirection(ResultSet.FETCH_FORWARD);
         } catch (Exception e) {
@@ -126,6 +128,10 @@ public class ResultSetHelperService implements Closeable {
         cost += System.nanoTime() - sec;
     }
 
+    public static void abort() {
+        isAborted = true;
+    }
+
     public ResultSetHelperService(ResultSet res) throws SQLException {
         this(res, RESULT_FETCH_SIZE);
     }
@@ -165,6 +171,10 @@ public class ResultSetHelperService implements Closeable {
      */
     public Object[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         long sec = System.nanoTime();
+        if(isAborted) {
+            if (rs != null) rs.close();
+            throw new IOException("Processing is aborted!");
+        }
         if (rs == null || rs.isClosed() || !rs.next()) {
             if (rs != null) rs.close();
             cost += System.nanoTime() - sec;
@@ -287,7 +297,7 @@ public class ResultSetHelperService implements Closeable {
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return null;
         String str;
-        double d;
+        final double d;
         switch (columnTypes[colIndex]) {
             case "object":
                 str = handleObject(o);
@@ -304,18 +314,23 @@ public class ResultSetHelperService implements Closeable {
                 return getColumnValue(o, colIndex, trim, dateFormatString, timestampFormatString);
             case "Double":
                 d = ((Number) o).doubleValue();
-                return d == (int) d ? (int) d : d;
+                return d == (long) d ? (long) d : d;
             case "Float":
                 return Double.valueOf(o.toString());
+            case "Integer":
+                return ((Number) o).intValue();
+            case "Long":
+                return ((Number) o).longValue();
             case "BigInteger":
                 d = ((Number) o).doubleValue();
-                if (o.toString().equals(new BigInteger(String.valueOf((int) d)))) return (int) d;
+                if (o.toString().equals(new BigInteger(String.valueOf((long) d)))) return (long) d;
                 return o;
             case "BigDecimal":
                 d = ((Number) o).doubleValue();
-                if (d == (int) d && o.toString().equals(new BigDecimal((int) d).toString())) return (int) d;
-                if (o.toString().equals(new BigDecimal(d).toString())) return d;
-                return o;
+                final long l = (long) d;
+                if (d == l && o.toString().equals(BigInteger.valueOf(l))) return l;
+                if (o.toString().equals(BigDecimal.valueOf(d).toString())) return d;
+                return o.toString();
             case "date":
             case "time":
                 str = handleDate((Date) o, dateFormatString);
@@ -341,7 +356,7 @@ public class ResultSetHelperService implements Closeable {
             default:
                 if (o instanceof Number) {
                     d = ((Number) o).doubleValue();
-                    return d == (int) d ? (int) d : d;
+                    return d == (long) d ? (long) d : d;
                 }
                 str = o.toString();
         }
@@ -402,12 +417,7 @@ public class ResultSetHelperService implements Closeable {
     public Object[][] fetchRowsAsync(int rows) throws Exception {
         final ArrayList<Object[]> ary = new ArrayList();
         //ary.add(columnNames);
-        startAsyncFetch(new RowCallback() {
-            @Override
-            public void execute(Object[] row) throws Exception {
-                ary.add(row.clone());
-            }
-        }, false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
+        startAsyncFetch(row -> ary.add(row.clone()), false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
         return ary.toArray(new Object[][]{});
     }
 
