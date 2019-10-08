@@ -302,13 +302,14 @@ public class CSVWriter implements Closeable {
         lineWidth = 0;
         int counter = 0;
         String nextElement;
+        Boolean stringContainsSpecialCharacters;
         for (int i = 0; i < nextLine.length; i++) {
             if (titles != null && remaps.containsKey(titles[i])) nextElement = remaps.get(titles[i]);
             else nextElement = nextLine[i] == null ? "" : nextLine[i].toString();
             if (resultService != null && excludes.containsKey(resultService.columnNames[i].toUpperCase()) && excludes.get(resultService.columnNames[i].toUpperCase()))
                 continue;
             if (++counter > 1) add(separator);
-            Boolean stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
+            stringContainsSpecialCharacters = stringContainsSpecialCharacters(nextElement);
             if ((applyQuotesToAll || stringContainsSpecialCharacters) && quotechar != NO_QUOTE_CHARACTER) {
                 add(quotechar);
             }

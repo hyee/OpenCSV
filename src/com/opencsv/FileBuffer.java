@@ -20,7 +20,7 @@ public class FileBuffer implements Closeable {
     public File file;
     public int bufferSize;
     public ByteBuffer buffer;
-    public int position = 0;
+    public long position = 0;
     protected RandomAccessFile out;
     protected DeflaterOutputStream zipStream;
     protected String zipType = null;

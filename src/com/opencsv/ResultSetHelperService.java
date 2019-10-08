@@ -48,6 +48,7 @@ public class ResultSetHelperService implements Closeable {
         long sec = System.nanoTime();
         rs = res;
         rs.setFetchSize(fetchSize);
+
         RESULT_FETCH_SIZE = fetchSize;
         isAborted = false;
         try {
@@ -171,7 +172,7 @@ public class ResultSetHelperService implements Closeable {
      */
     public Object[] getColumnValues(boolean trim, String dateFormatString, String timeFormatString) throws SQLException, IOException {
         long sec = System.nanoTime();
-        if(isAborted) {
+        if (isAborted) {
             if (rs != null) rs.close();
             throw new IOException("Processing is aborted!");
         }
@@ -192,6 +193,8 @@ public class ResultSetHelperService implements Closeable {
                 case "timestamptz":
                     try {
                         o = rs.getObject(i + 1, ZonedDateTime.class);
+                    } catch (AbstractMethodError ex2) {
+                        o = rs.getTimestamp(i + 1);
                     } catch (Exception ex) {
                         try {
                             o = rs.getObject(i + 1, OffsetDateTime.class);
@@ -201,7 +204,11 @@ public class ResultSetHelperService implements Closeable {
                     }
                     break;
                 case "timestamp":
-                    o = rs.getObject(i + 1, Timestamp.class);
+                    try {
+                        o = rs.getObject(i + 1, Timestamp.class);
+                    } catch (AbstractMethodError ex2) {
+                        o = rs.getTimestamp(i + 1);
+                    }
                     break;
                 case "raw":
                     o = rs.getString(i + 1);
@@ -223,7 +230,6 @@ public class ResultSetHelperService implements Closeable {
                 case "xml":
                     SQLXML x = rs.getSQLXML(i + 1);
                     try {
-
                         if (x != null) o = x.getString();
                         else o = null;
                     } catch (Exception e) {
@@ -288,10 +294,9 @@ public class ResultSetHelperService implements Closeable {
             TimeTZFormat1 = new SimpleDateFormat(timestampFormatString + " X");
         }
         if (timestamp == null) return null;
-
-        if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
-        else if (timestamp instanceof Timestamp) return TimeTZFormat1.format((Timestamp) timestamp);
-        return ((ZonedDateTime) timestamp).format(timeTZFormat);
+        if (timestamp instanceof ZonedDateTime) ((ZonedDateTime) timestamp).format(timeTZFormat);
+        else if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
+        return TimeTZFormat1.format((Timestamp) timestamp);
     }
 
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
@@ -396,7 +401,7 @@ public class ResultSetHelperService implements Closeable {
 
         Object[] values;
         int count = 0;
-        while ((values = queue.take()) != EOF && (fetchRows < 0 || count++ < fetchRows)) {
+        while ((values = queue.take()) != EOF && (fetchRows < 0 || ++count < fetchRows)) {
             for (int i = 0; i < columnCount; i++)
                 values[i] = getColumnValue(values[i], i, trim, dateFormatString, timeFormatString);
             callback.execute(values);
