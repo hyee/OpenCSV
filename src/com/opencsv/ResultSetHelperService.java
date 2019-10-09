@@ -294,9 +294,9 @@ public class ResultSetHelperService implements Closeable {
             TimeTZFormat1 = new SimpleDateFormat(timestampFormatString + " X");
         }
         if (timestamp == null) return null;
-        if (timestamp instanceof ZonedDateTime) ((ZonedDateTime) timestamp).format(timeTZFormat);
-        else if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
-        return TimeTZFormat1.format((Timestamp) timestamp);
+        if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
+        else if (timestamp instanceof Timestamp) return TimeTZFormat1.format((Timestamp) timestamp);
+        return ((ZonedDateTime) timestamp).format(timeTZFormat);
     }
 
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
