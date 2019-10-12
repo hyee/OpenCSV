@@ -119,6 +119,10 @@ public class ResultSetHelperService implements Closeable {
                 case Types.SQLXML:
                     value = "xml";
                     break;
+                case Types.LONGVARCHAR:
+                case Types.LONGNVARCHAR:
+                    value = "longtext";
+                    break;
                 default:
                     value = "string";
             }
@@ -183,11 +187,14 @@ public class ResultSetHelperService implements Closeable {
             return null;
         }
         if (rowObject == null) rowObject = new Object[columnCount];
-        Object o;
+        Object o = null;
+        boolean isFetched;
         for (int i = 0; i < columnCount; i++) {
+            isFetched = false;
             if (columnClassName[i] == null) {
                 o = rs.getObject(i + 1);
                 if (o != null) columnClassName[i] = o.getClass().getName();
+                isFetched = true;
             }
             switch (columnTypes[i]) {
                 case "timestamptz":
@@ -199,16 +206,12 @@ public class ResultSetHelperService implements Closeable {
                         try {
                             o = rs.getObject(i + 1, OffsetDateTime.class);
                         } catch (Exception ex1) {
-                            o = rs.getObject(i + 1, Timestamp.class);
+                            o = rs.getTimestamp(i + 1);
                         }
                     }
                     break;
                 case "timestamp":
-                    try {
-                        o = rs.getObject(i + 1, Timestamp.class);
-                    } catch (AbstractMethodError ex2) {
-                        o = rs.getTimestamp(i + 1);
-                    }
+                    o = rs.getTimestamp(i + 1);
                     break;
                 case "raw":
                     o = rs.getString(i + 1);
@@ -233,11 +236,11 @@ public class ResultSetHelperService implements Closeable {
                         if (x != null) o = x.getString();
                         else o = null;
                     } catch (Exception e) {
-                        o = rs.getObject(i + 1);
+                        o = isFetched ? o : rs.getObject(i + 1);
                     }
                     break;
                 default:
-                    o = rs.getObject(i + 1);
+                    o = isFetched ? o : rs.getObject(i + 1);
             }
             if (o != null && rs.wasNull()) o = null;
             if (queue == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
