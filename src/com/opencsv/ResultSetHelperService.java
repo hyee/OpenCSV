@@ -220,14 +220,20 @@ public class ResultSetHelperService implements Closeable {
                     Blob bl = rs.getBlob(i + 1);
                     if (bl != null) {
                         o = DatatypeConverter.printHexBinary(bl.getBytes(1, (int) bl.length()));
-                        bl.free();
+                        try {
+                            bl.free();
+                        } catch (Exception e) {
+                        }
                     } else o = null;
                     break;
                 case "clob":
                     Clob c = rs.getClob(i + 1);
                     if (c != null) {
                         o = c.getSubString(1, (int) c.length());
-                        c.free();
+                        try {
+                            c.free();
+                        } catch (Exception e) {
+                        }
                     } else o = null;
                     break;
                 case "xml":
