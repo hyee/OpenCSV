@@ -128,7 +128,8 @@ public class ResultSetHelperService implements Closeable {
             }
             columnTypesI[i] = type;
             columnTypes[i] = value.intern();
-            columnNames[i] = metadata.getColumnName(i + 1).intern();
+            final String name=metadata.getColumnName(i + 1);
+            columnNames[i] = (name==null?"":name).intern();
         }
         cost += System.nanoTime() - sec;
     }
@@ -192,7 +193,11 @@ public class ResultSetHelperService implements Closeable {
         for (int i = 0; i < columnCount; i++) {
             isFetched = false;
             if (columnClassName[i] == null) {
-                o = rs.getObject(i + 1);
+                try {
+                    o = rs.getObject(i + 1);
+                } catch (SQLException e) {
+                    o = null;
+                }
                 if (o != null) columnClassName[i] = o.getClass().getName();
                 isFetched = true;
             }
@@ -246,7 +251,11 @@ public class ResultSetHelperService implements Closeable {
                     }
                     break;
                 default:
-                    o = isFetched ? o : rs.getObject(i + 1);
+                    try {
+                        o = isFetched ? o : rs.getObject(i + 1);
+                    } catch (SQLException e) {
+                        o = null;
+                    }
             }
             if (o != null && rs.wasNull()) o = null;
             if (queue == null) rowObject[i] = getColumnValue(o, i, trim, dateFormatString, timeFormatString);
