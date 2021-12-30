@@ -61,8 +61,11 @@ public class ResultSetHelperService implements Closeable {
         columnTypes = new String[columnCount];
         columnClassName = new String[columnCount];
         columnTypesI = new int[columnCount];
+        // System.out.println("Hello, Cali!");
         for (int i = 0; i < metadata.getColumnCount(); i++) {
             int type = metadata.getColumnType(i + 1);
+            int scale = metadata.getScale(i + 1);
+            // String typeName = metadata.getColumnTypeName(i + 1);
             String value;
             switch (type) {
                 case Types.JAVA_OBJECT:
@@ -76,8 +79,10 @@ public class ResultSetHelperService implements Closeable {
                 case Types.DOUBLE:
                 case Types.FLOAT:
                 case Types.REAL:
-                case Types.NUMERIC:
                     value = "double";
+                    break;
+                case Types.NUMERIC:
+                    value = (scale == 0) ? "long" : "double";
                     break;
                 case Types.BIGINT:
                     value = "long";
@@ -128,9 +133,11 @@ public class ResultSetHelperService implements Closeable {
             }
             columnTypesI[i] = type;
             columnTypes[i] = value.intern();
-            final String name=metadata.getColumnName(i + 1);
+            final String name = metadata.getColumnName(i + 1);
+            // System.out.printf("%s => %s => %s\n", name, typeName, value);
             columnNames[i] = (name==null?"":name).intern();
         }
+        // System.out.println("Hello, Kho!");
         cost += System.nanoTime() - sec;
     }
 
