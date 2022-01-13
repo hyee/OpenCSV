@@ -29,13 +29,12 @@ public class SQLWriter extends CSVWriter {
     }
 
     public void writeNextRow(Object[] nextLine) throws IOException {
-        if (nextLine == null) return;
+        if (nextLine == null || nextLine.length < this.columnTypes.length) return;
         if (totalRows == 0) writeLog(0);
         add(columns);
         lineWidth = 2;
         int counter = 0;
-        for (int i = 0; i < Math.min(nextLine.length, this.columnTypes.length); i++) {
-            if (this.columnTypes[i] == null) continue;
+        for (int i = 0; i < this.columnTypes.length; i++) {
             if (titles != null && excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase()))
                 continue;
             if (++counter > 1) add(separator);
@@ -48,14 +47,14 @@ public class SQLWriter extends CSVWriter {
                 add(nextElement == null ? "null" : nextElement);
             } else {
                 String nextElement = nextLine[i] == null ? null : nextLine[i].toString();
-                Boolean isString = nextElement != null && !this.columnTypes[i].equals("double") && !this.columnTypes[i].equals("boolean");
+                Boolean isString = nextElement != null && !"double".equals(this.columnTypes[i]) && !"boolean".equals(this.columnTypes[i]);
                 if (isString) {
                     add(quotechar);
                     if (nextElement.lastIndexOf(quotechar) >= 0) processLine(nextElement);
                     else add(nextElement);
                     add(quotechar);
                 } else {
-                    add(nextElement == null ? "null" : nextElement);
+                    add(nextElement == null || nextElement.equals("") ? "null" : nextElement);
                 }
             }
         }
@@ -133,7 +132,12 @@ public class SQLWriter extends CSVWriter {
 
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {
         try (SQLWriter w = this) {
-            String[] array = reader.readNext();
+            ArrayList<String> columns = new ArrayList<>();
+            for (String name : reader.readNext()) {
+                if (name.trim().equals("")) break;
+                columns.add(name.trim());
+            }
+            String[] array = columns.toArray(new String[0]);
             String types[] = new String[array.length];
             for (int i = 0; i < array.length; i++) types[i] = "string";
             if (resultService != null && resultService.columnNames != null) {

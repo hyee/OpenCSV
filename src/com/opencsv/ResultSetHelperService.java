@@ -89,7 +89,7 @@ public class ResultSetHelperService implements Closeable {
                     value = "int";
                     break;
                 case Types.TIME:
-                    value = "date";
+                    value = "time";
                     break;
                 case Types.DATE:
                     value = "date";
@@ -345,18 +345,22 @@ public class ResultSetHelperService implements Closeable {
             case "Long":
                 return ((Number) o).longValue();
             case "BigInteger":
+                if(o instanceof BigInteger) return o.toString();
                 d = ((Number) o).doubleValue();
                 if (o.toString().equals(new BigInteger(String.valueOf((long) d)))) return (long) d;
                 return o;
             case "BigDecimal":
+                if(o instanceof BigDecimal) return o.toString();
                 d = ((Number) o).doubleValue();
                 final long l = (long) d;
                 if (d == l && o.toString().equals(BigInteger.valueOf(l))) return l;
                 if (o.toString().equals(BigDecimal.valueOf(d).toString())) return d;
                 return o.toString();
             case "date":
-            case "time":
                 str = handleDate((Date) o, dateFormatString);
+                break;
+            case "time":
+                str = o.toString();
                 break;
             case "timestamp":
                 try {

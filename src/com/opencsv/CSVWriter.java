@@ -396,14 +396,14 @@ public class CSVWriter implements Closeable {
         String ColName, str;
         FileWriter writer = new FileWriter(FileName);
         StringBuilder b = new StringBuilder(CSVParser.READ_BUFFER_SIZE);
-        b.append("OPTIONS (SKIP=1, ROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
+        b.append("OPTIONS (SKIP=1, ROWS=3000, COLUMNARRAYROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
         b.append("INFILE      ").append(buffer.fileName).append(".csv");
         if (rowSep != null) b.append(" \"STR '" + rowSep + "'\"");
         b.append("\n");
         b.append("BADFILE     ").append(buffer.fileName).append(".bad\n");
         b.append("DISCARDFILE ").append(buffer.fileName).append(".dsc\n");
         b.append("APPEND INTO TABLE ").append(buffer.fileName).append("\n");
-        b.append("FIELDS CSV TERMINATED BY ").append(toHexIfInvisible(separator));
+        b.append("FIELDS CSV WITHOUT EMBEDDED TERMINATED BY ").append(toHexIfInvisible(separator));
         b.append(" OPTIONALLY ENCLOSED BY ").append(toHexIfInvisible(encloser)).append(" AND ").append(toHexIfInvisible(encloser)).append(" TRAILING NULLCOLS\n(\n");
         for (int i = 0; i < titles.length; i++) {
             if (excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase())) continue;
