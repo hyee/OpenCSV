@@ -3,6 +3,7 @@ package com.opencsv;
 import javax.xml.bind.DatatypeConverter;
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
@@ -35,11 +36,12 @@ public class ResultSetHelperService implements Closeable {
     private SimpleDateFormat timeFormat;
     private SimpleDateFormat TimeTZFormat1;
     private DateTimeFormatter timeTZFormat;
-    private ResultSet rs;
-    private Object[] EOF = new Object[1];
+    private final ResultSet rs;
+    private final Object[] EOF = new Object[1];
     private ArrayBlockingQueue<Object[]> queue;
     private boolean isFinished = false;
     private static volatile boolean isAborted = false;
+    private final StringBuilder sb = new StringBuilder();
 
     /**
      * Default Constructor.
@@ -70,6 +72,7 @@ public class ResultSetHelperService implements Closeable {
                     break;
                 case Types.BIT:
                 case Types.BOOLEAN:
+                case 252: //PLSQL_BOOLEAN
                     value = "boolean";
                     break;
                 case Types.DECIMAL:
@@ -82,7 +85,6 @@ public class ResultSetHelperService implements Closeable {
                 case Types.BIGINT:
                     value = "long";
                     break;
-//               case Types.BIT:
                 case Types.INTEGER:
                 case Types.TINYINT:
                 case Types.SMALLINT:
@@ -100,8 +102,8 @@ public class ResultSetHelperService implements Closeable {
                     break;
                 case -101:
                 case -102:
+                case Types.TIMESTAMP_WITH_TIMEZONE:
                     //case Types.TIME_WITH_TIMEZONE:
-                    //case Types.TIMESTAMP_WITH_TIMEZONE:
                     value = "timestamptz";
                     break;
                 case Types.BINARY:
@@ -111,6 +113,7 @@ public class ResultSetHelperService implements Closeable {
                     break;
                 case Types.CLOB:
                 case Types.NCLOB:
+                    //case 2016: //JSON
                     value = "clob";
                     break;
                 case Types.BLOB:
@@ -123,13 +126,28 @@ public class ResultSetHelperService implements Closeable {
                 case Types.LONGNVARCHAR:
                     value = "longtext";
                     break;
+                case Types.ARRAY:
+                    value = "array";
+                    break;
+                case Types.STRUCT:
+                case 2008:
+                    value = "struct";
+                    break;
+                case 2007:
+                    value = "anydata";
+                    break;
+                case 2016:
+                    value = "oraclejson";
+                    break;
                 default:
                     value = "string";
             }
+
             columnTypesI[i] = type;
             columnTypes[i] = value.intern();
-            final String name=metadata.getColumnName(i + 1);
-            columnNames[i] = (name==null?"":name).intern();
+            final String name = metadata.getColumnName(i + 1);
+            //System.out.println(name+":"+type);
+            columnNames[i] = (name == null ? "" : name).intern();
         }
         cost += System.nanoTime() - sec;
     }
@@ -250,10 +268,46 @@ public class ResultSetHelperService implements Closeable {
                         o = isFetched ? o : rs.getObject(i + 1);
                     }
                     break;
+                case "array":
+                case "struct":
+                    try {
+                        o = isFetched ? o : rs.getObject(i + 1);
+                    } catch (SQLException e) {
+                        o = null;
+                    }
+                    if (o != null && (o instanceof Array || o instanceof Struct)) {
+                        try {
+                            sb.setLength(0);
+                            object2String(sb, o, "", dateFormatString, timeFormatString);
+                            o = sb.toString();
+                        } catch (Exception e) {
+                            o = isFetched ? o : rs.getObject(i + 1);
+                        }
+                    }
+                    break;
+                case "anydata":
+                    try {
+                        o = isFetched ? o : rs.getObject(i + 1);
+                        if (o != null && !(o instanceof String) && !(o instanceof Number)) {
+                            Method method = o.getClass().getDeclaredMethod("stringValue");
+                            o = method.invoke(o);
+                        }
+                    } catch (Exception e) {
+
+                    }
+                    break;
+                case "oraclejson":
+                    try {
+                        o = rs.getObject(i + 1, Class.forName("oracle.sql.json.OracleJsonValue"));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    break;
                 default:
                     try {
                         o = isFetched ? o : rs.getObject(i + 1);
                     } catch (SQLException e) {
+                        e.printStackTrace();
                         o = null;
                     }
             }
@@ -317,6 +371,45 @@ public class ResultSetHelperService implements Closeable {
         return ((ZonedDateTime) timestamp).format(timeTZFormat);
     }
 
+    public void object2String(StringBuilder sb, Object obj, String indent, String dateFormatString, String timeFormatString) throws Exception {
+        Object[] arr;
+        if (obj instanceof Array) {
+            sb.append('[');
+            arr = (Object[]) ((Array) obj).getArray();
+            indent = indent + " ";
+        } else {
+            indent = indent + "    ";
+            arr = ((Struct) obj).getAttributes();
+            sb.append(((Struct) obj).getSQLTypeName()).append("(\n").append(indent);
+        }
+        for (int index = 0; index < arr.length; index++) {
+            final Object item = arr[index];
+            if (index > 0) sb.append(",\n").append(indent);
+            if (item == null) {
+                sb.append("null");
+            } else if (item instanceof Struct || item instanceof Array) {
+                object2String(sb, item, indent, dateFormatString, timeFormatString);
+            } else {
+                String str = item.toString();
+                if (item instanceof Number) {
+                    sb.append(str);
+                } else if (item instanceof Timestamp) {
+                    sb.append("'").append(handleTimestamp((Timestamp) item, timeFormatString)).append("'");
+                } else if (item instanceof Date) {
+                    sb.append("'").append(handleDate((Date) item, dateFormatString)).append("'");
+                } else {
+                    sb.append("'").append(str.replace("'", "''")).append("'");
+                }
+            }
+        }
+
+        if (obj instanceof Array) {
+            sb.append(']');
+        } else {
+            sb.append(')');
+        }
+    }
+
     private Object getColumnValue(Object o, int colIndex, boolean trim, String dateFormatString, String timestampFormatString) throws SQLException, IOException {
         if (o == null) return null;
         String str;
@@ -345,12 +438,12 @@ public class ResultSetHelperService implements Closeable {
             case "Long":
                 return ((Number) o).longValue();
             case "BigInteger":
-                if(o instanceof BigInteger) return o.toString();
+                if (o instanceof BigInteger) return o.toString();
                 d = ((Number) o).doubleValue();
                 if (o.toString().equals(new BigInteger(String.valueOf((long) d)))) return (long) d;
                 return o;
             case "BigDecimal":
-                if(o instanceof BigDecimal) return o.toString();
+                if (o instanceof BigDecimal) return o.toString();
                 d = ((Number) o).doubleValue();
                 final long l = (long) d;
                 if (d == l && o.toString().equals(BigInteger.valueOf(l))) return l;
