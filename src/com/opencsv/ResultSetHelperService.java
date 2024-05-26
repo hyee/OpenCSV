@@ -268,34 +268,6 @@ public class ResultSetHelperService implements Closeable {
                         o = isFetched ? o : rs.getObject(i + 1);
                     }
                     break;
-                case "array":
-                case "struct":
-                    try {
-                        o = isFetched ? o : rs.getObject(i + 1);
-                    } catch (SQLException e) {
-                        o = null;
-                    }
-                    if (o != null && (o instanceof Array || o instanceof Struct)) {
-                        try {
-                            sb.setLength(0);
-                            object2String(sb, o, "", dateFormatString, timeFormatString);
-                            o = sb.toString();
-                        } catch (Exception e) {
-                            o = isFetched ? o : rs.getObject(i + 1);
-                        }
-                    }
-                    break;
-                case "anydata":
-                    try {
-                        o = isFetched ? o : rs.getObject(i + 1);
-                        if (o != null && !(o instanceof String) && !(o instanceof Number)) {
-                            Method method = o.getClass().getDeclaredMethod("stringValue");
-                            o = method.invoke(o);
-                        }
-                    } catch (Exception e) {
-
-                    }
-                    break;
                 case "oraclejson":
                     try {
                         o = rs.getObject(i + 1, Class.forName("oracle.sql.json.OracleJsonValue"));
@@ -371,30 +343,42 @@ public class ResultSetHelperService implements Closeable {
         return ((ZonedDateTime) timestamp).format(timeTZFormat);
     }
 
-    public void object2String(StringBuilder sb, Object obj, String indent, String dateFormatString, String timeFormatString) throws Exception {
+    public void object2String(StringBuilder sb, Object obj, String indent, String dateFormatString, String timestampFormatString) throws Exception {
         Object[] arr;
         if (obj instanceof Array) {
-            sb.append('[');
+            sb.append('{');
             arr = (Object[]) ((Array) obj).getArray();
-            indent = indent + " ";
         } else {
-            indent = indent + "    ";
             arr = ((Struct) obj).getAttributes();
-            sb.append(((Struct) obj).getSQLTypeName()).append("(\n").append(indent);
+            sb.append(((Struct) obj).getSQLTypeName()).append("(");
         }
+        indent = indent + "  ";
         for (int index = 0; index < arr.length; index++) {
             final Object item = arr[index];
-            if (index > 0) sb.append(",\n").append(indent);
+            if (index > 0) sb.append(",");
             if (item == null) {
                 sb.append("null");
             } else if (item instanceof Struct || item instanceof Array) {
-                object2String(sb, item, indent, dateFormatString, timeFormatString);
+                sb.append("\n").append(indent);
+                object2String(sb, item, indent, dateFormatString, timestampFormatString);
             } else {
                 String str = item.toString();
                 if (item instanceof Number) {
-                    sb.append(str);
+                    BigDecimal number;
+                    if(item instanceof BigDecimal) {
+                        number = (BigDecimal) item;
+                        number.setScale(10);
+                    } else if(item instanceof BigInteger) {
+                        number = new BigDecimal((BigInteger)item);
+                    } else if(item instanceof Long) {
+                        number = BigDecimal.valueOf((Long)item);
+                    } else {
+                        number = BigDecimal.valueOf(((Number)item).doubleValue());
+                        number.setScale(10);
+                    }
+                    sb.append(number.stripTrailingZeros().toPlainString());
                 } else if (item instanceof Timestamp) {
-                    sb.append("'").append(handleTimestamp((Timestamp) item, timeFormatString)).append("'");
+                    sb.append("'").append(handleTimestamp((Timestamp) item, timestampFormatString)).append("'");
                 } else if (item instanceof Date) {
                     sb.append("'").append(handleDate((Date) item, dateFormatString)).append("'");
                 } else {
@@ -404,7 +388,7 @@ public class ResultSetHelperService implements Closeable {
         }
 
         if (obj instanceof Array) {
-            sb.append(']');
+            sb.append('}');
         } else {
             sb.append(')');
         }
@@ -472,6 +456,32 @@ public class ResultSetHelperService implements Closeable {
                 break;
             case "longraw":
                 str = DatatypeConverter.printHexBinary((byte[]) o);
+                break;
+            case "array":
+            case "struct":
+                try {
+                    if (!o.getClass().getTypeName().contains("postgres") && (o instanceof Array || o instanceof Struct)) {
+                        sb.setLength(0);
+                        object2String(sb, o, "", dateFormatString, timestampFormatString);
+                        str = sb.toString();
+                    } else {
+                        str = o.toString();
+                    }
+                } catch (Exception e) {
+                    str = o.toString();
+                }
+                break;
+            case "anydata":
+                try {
+                    if (!(o instanceof String) && !(o instanceof Number)) {
+                        Method method = o.getClass().getDeclaredMethod("stringValue");
+                        str = (String) method.invoke(o);
+                    } else {
+                        str = o.toString();
+                    }
+                } catch (Exception e) {
+                    str = o.toString();
+                }
                 break;
             default:
                 if (o instanceof Number) {
