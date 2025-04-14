@@ -106,6 +106,12 @@ public class ResultSetHelperService implements Closeable {
                     //case Types.TIME_WITH_TIMEZONE:
                     value = "timestamptz";
                     break;
+                case -105:
+                case -106:
+                case -107:
+                case -108:
+                    value = "vector";
+                    break;
                 case Types.BINARY:
                 case Types.VARBINARY:
                 case Types.LONGVARBINARY:
@@ -275,6 +281,13 @@ public class ResultSetHelperService implements Closeable {
                         e.printStackTrace();
                     }
                     break;
+                case "vector":
+                    try {
+                        o = rs.getObject(i + 1, Class.forName("oracle.sql.VECTOR"));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    break;
                 default:
                     try {
                         o = isFetched ? o : rs.getObject(i + 1);
@@ -365,15 +378,15 @@ public class ResultSetHelperService implements Closeable {
                 String str = item.toString();
                 if (item instanceof Number) {
                     BigDecimal number;
-                    if(item instanceof BigDecimal) {
+                    if (item instanceof BigDecimal) {
                         number = (BigDecimal) item;
                         number.setScale(10);
-                    } else if(item instanceof BigInteger) {
-                        number = new BigDecimal((BigInteger)item);
-                    } else if(item instanceof Long) {
-                        number = BigDecimal.valueOf((Long)item);
+                    } else if (item instanceof BigInteger) {
+                        number = new BigDecimal((BigInteger) item);
+                    } else if (item instanceof Long) {
+                        number = BigDecimal.valueOf((Long) item);
                     } else {
-                        number = BigDecimal.valueOf(((Number)item).doubleValue());
+                        number = BigDecimal.valueOf(((Number) item).doubleValue());
                         number.setScale(10);
                     }
                     sb.append(number.stripTrailingZeros().toPlainString());
@@ -479,6 +492,25 @@ public class ResultSetHelperService implements Closeable {
                     } else {
                         str = o.toString();
                     }
+                } catch (Exception e) {
+                    str = o.toString();
+                }
+                break;
+            case "vector":
+                try {
+                    Method method = o.getClass().getDeclaredMethod("toDoubleArray");
+                    final double[] ary = (double[]) method.invoke(o);
+                    sb.setLength(0);
+                    sb.append(('['));
+                    final int total = ary.length;
+                    for (int i = 0; i < total; i++) {
+                        sb.append(ary[i]);
+                        if((i + 1) < total) {
+                            sb.append(((i + 1) % 4 == 0)?",\n ":",");
+                        }
+                    }
+                    sb.append(']');
+                    str = sb.toString();
                 } catch (Exception e) {
                     str = o.toString();
                 }
