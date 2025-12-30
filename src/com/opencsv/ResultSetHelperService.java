@@ -245,6 +245,9 @@ public class ResultSetHelperService implements Closeable {
                 case "raw":
                     o = rs.getString(i + 1);
                     break;
+                case "boolean":
+                    o = rs.getBoolean(i + 1);
+                    break;
                 case "blob":
                     Blob bl = rs.getBlob(i + 1);
                     if (bl != null) {
@@ -294,6 +297,17 @@ public class ResultSetHelperService implements Closeable {
                     } catch (SQLException e) {
                         e.printStackTrace();
                         o = null;
+                        try {
+                            o=rs.getString(i + 1);
+                            //handle possible numeric overflow issue
+                            if(columnTypes[i].equals("double")) {
+                                o=new BigDecimal((String)o);
+                            } else if(columnTypes[i].equals("long")) {
+                                o=new BigInteger((String)o);
+                            }
+                        } catch (Exception e1) {
+                            e.printStackTrace();
+                        }
                     }
             }
             if (o != null && rs.wasNull()) o = null;
@@ -501,12 +515,12 @@ public class ResultSetHelperService implements Closeable {
                     Method method = o.getClass().getDeclaredMethod("toDoubleArray");
                     final double[] ary = (double[]) method.invoke(o);
                     sb.setLength(0);
-                    sb.append(('['));
+                    sb.append('[');
                     final int total = ary.length;
                     for (int i = 0; i < total; i++) {
                         sb.append(ary[i]);
-                        if((i + 1) < total) {
-                            sb.append(((i + 1) % 4 == 0)?",\n ":",");
+                        if ((i + 1) < total) {
+                            sb.append(((i + 1) % 4 == 0) ? ",\n " : ",");
                         }
                     }
                     sb.append(']');
