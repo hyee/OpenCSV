@@ -73,12 +73,12 @@ public class CSVWriter implements Closeable {
     }
 
     public CSVWriter(String fileName, char separator, char quotechar, char escapechar, String lineEnd) throws IOException {
-        this(new FileWriter(fileName), separator, quotechar, escapechar, lineEnd);
+        this(new OutputStreamWriter(new FileOutputStream(fileName), "UTF-8"), separator, quotechar, escapechar, lineEnd);
         this.CSVFileName = fileName;
         String extensionName = "csv";
         if (quotechar == '\'' && escapechar == quotechar) extensionName = "sql";
         buffer = new FileBuffer(INITIAL_BUFFER_SIZE, fileName, extensionName);
-        logWriter = new PrintWriter(buffer.file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".log");
+        logWriter = new PrintWriter(new OutputStreamWriter(new FileOutputStream(buffer.file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".log"), "UTF-8"));
         //logWriter = new PrintWriter(System.err);
     }
 
@@ -394,7 +394,7 @@ public class CSVWriter implements Closeable {
         File file = new File(CSVFileName);
         String FileName = file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".ctl";
         String ColName, str;
-        FileWriter writer = new FileWriter(FileName);
+        Writer writer = new OutputStreamWriter(new FileOutputStream(FileName), "UTF-8");
         StringBuilder b = new StringBuilder(CSVParser.READ_BUFFER_SIZE);
         b.append("OPTIONS (SKIP=1, ROWS=3000, COLUMNARRAYROWS=3000, BINDSIZE=16777216, STREAMSIZE=33554432, ERRORS=1000, READSIZE=16777216, DIRECT=FALSE)\nLOAD DATA\n");
         b.append("INFILE      ").append(buffer.fileName).append(".csv");

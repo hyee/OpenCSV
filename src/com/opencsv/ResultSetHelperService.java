@@ -13,6 +13,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by Tyler on 30/12/2016.
@@ -32,10 +33,11 @@ public class ResultSetHelperService implements Closeable {
     public int[] columnTypesI;
     public Object[] rowObject;
     public long cost = 0;
-    private SimpleDateFormat dateFormat;
-    private SimpleDateFormat timeFormat;
-    private SimpleDateFormat TimeTZFormat1;
-    private DateTimeFormatter timeTZFormat;
+    private final ThreadLocal<SimpleDateFormat> dateFormatHolder = new ThreadLocal<>();
+    private final ThreadLocal<SimpleDateFormat> timeFormatHolder = new ThreadLocal<>();
+    private final ThreadLocal<DateTimeFormatter> timeTZFormatHolder = new ThreadLocal<>();
+    private final ConcurrentHashMap<Class<?>, Method> stringValueMethodCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Class<?>, Method> toDoubleArrayMethodCache = new ConcurrentHashMap<>();
     private final ResultSet rs;
     private final Object[] EOF = new Object[1];
     private ArrayBlockingQueue<Object[]> queue;
@@ -298,12 +300,12 @@ public class ResultSetHelperService implements Closeable {
                         e.printStackTrace();
                         o = null;
                         try {
-                            o=rs.getString(i + 1);
+                            o = rs.getString(i + 1);
                             //handle possible numeric overflow issue
-                            if(columnTypes[i].equals("double")) {
-                                o=new BigDecimal((String)o);
-                            } else if(columnTypes[i].equals("long")) {
-                                o=new BigInteger((String)o);
+                            if (columnTypes[i].equals("double")) {
+                                o = new BigDecimal((String) o);
+                            } else if (columnTypes[i].equals("long")) {
+                                o = new BigInteger((String) o);
                             }
                         } catch (Exception e1) {
                             e.printStackTrace();
@@ -338,36 +340,43 @@ public class ResultSetHelperService implements Closeable {
     }
 
     protected String handleDate(Date date, String dateFormatString) {
-        if (dateFormat == null) {
+        if (date == null) return null;
+        SimpleDateFormat df = dateFormatHolder.get();
+        if (df == null || !dateFormatString.equals(DEFAULT_DATE_FORMAT)) {
             DEFAULT_DATE_FORMAT = dateFormatString;
-            dateFormat = new SimpleDateFormat(dateFormatString);
+            df = new SimpleDateFormat(dateFormatString);
+            dateFormatHolder.set(df);
         }
-        return date == null ? null : dateFormat.format(date);
+        return df.format(date);
     }
 
     protected String handleTimestamp(Timestamp timestamp, String timestampFormatString) {
-        String result = null;
-        if (timeFormat == null) {
+        if (timestamp == null) return null;
+        SimpleDateFormat tf = timeFormatHolder.get();
+        if (tf == null || !timestampFormatString.equals(DEFAULT_TIMESTAMP_FORMAT)) {
             DEFAULT_TIMESTAMP_FORMAT = timestampFormatString;
-            timeFormat = new SimpleDateFormat(timestampFormatString);
+            tf = new SimpleDateFormat(timestampFormatString);
+            timeFormatHolder.set(tf);
         }
-        if (timestamp != null) {
-            result = timeFormat.format(timestamp);
-            if (result.endsWith(".0")) result = result.substring(0, result.length() - 2);
-            else if (result.endsWith(".000")) result = result.substring(0, result.length() - 4);
-        }
+        String result = tf.format(timestamp);
+        if (result.endsWith(".0")) result = result.substring(0, result.length() - 2);
+        else if (result.endsWith(".000")) result = result.substring(0, result.length() - 4);
         return result;
     }
 
     protected String handleTimestampTZ(Object timestamp, String timestampFormatString) {
-        if (timeTZFormat == null) {
-            timeTZFormat = DateTimeFormatter.ofPattern(timestampFormatString + " X");
-            TimeTZFormat1 = new SimpleDateFormat(timestampFormatString + " X");
-        }
         if (timestamp == null) return null;
-        if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(timeTZFormat);
-        else if (timestamp instanceof Timestamp) return TimeTZFormat1.format((Timestamp) timestamp);
-        return ((ZonedDateTime) timestamp).format(timeTZFormat);
+        DateTimeFormatter formatter = timeTZFormatHolder.get();
+        if (formatter == null) {
+            formatter = DateTimeFormatter.ofPattern(timestampFormatString + " XXX");
+            timeTZFormatHolder.set(formatter);
+        }
+        if (timestamp instanceof OffsetDateTime) return ((OffsetDateTime) timestamp).format(formatter);
+        else if (timestamp instanceof Timestamp) {
+            ZonedDateTime zdt = ((Timestamp) timestamp).toInstant().atZone(java.time.ZoneId.systemDefault());
+            return zdt.format(formatter);
+        }
+        return ((ZonedDateTime) timestamp).format(formatter);
     }
 
     public void object2String(StringBuilder sb, Object obj, String indent, String dateFormatString, String timestampFormatString) throws Exception {
@@ -501,8 +510,20 @@ public class ResultSetHelperService implements Closeable {
             case "anydata":
                 try {
                     if (!(o instanceof String) && !(o instanceof Number)) {
-                        Method method = o.getClass().getDeclaredMethod("stringValue");
-                        str = (String) method.invoke(o);
+                        Method method = stringValueMethodCache.computeIfAbsent(o.getClass(), clazz -> {
+                            try {
+                                Method m = clazz.getDeclaredMethod("stringValue");
+                                m.setAccessible(true);
+                                return m;
+                            } catch (NoSuchMethodException e) {
+                                return null;
+                            }
+                        });
+                        if (method != null) {
+                            str = (String) method.invoke(o);
+                        } else {
+                            str = o.toString();
+                        }
                     } else {
                         str = o.toString();
                     }
@@ -512,19 +533,31 @@ public class ResultSetHelperService implements Closeable {
                 break;
             case "vector":
                 try {
-                    Method method = o.getClass().getDeclaredMethod("toDoubleArray");
-                    final double[] ary = (double[]) method.invoke(o);
-                    sb.setLength(0);
-                    sb.append('[');
-                    final int total = ary.length;
-                    for (int i = 0; i < total; i++) {
-                        sb.append(ary[i]);
-                        if ((i + 1) < total) {
-                            sb.append(((i + 1) % 4 == 0) ? ",\n " : ",");
+                    Method method = toDoubleArrayMethodCache.computeIfAbsent(o.getClass(), clazz -> {
+                        try {
+                            Method m = clazz.getDeclaredMethod("toDoubleArray");
+                            m.setAccessible(true);
+                            return m;
+                        } catch (NoSuchMethodException e) {
+                            return null;
                         }
+                    });
+                    if (method != null) {
+                        final double[] ary = (double[]) method.invoke(o);
+                        sb.setLength(0);
+                        sb.append('[');
+                        final int total = ary.length;
+                        for (int i = 0; i < total; i++) {
+                            sb.append(ary[i]);
+                            if ((i + 1) < total) {
+                                sb.append(((i + 1) % 4 == 0) ? ",\n " : ",");
+                            }
+                        }
+                        sb.append(']');
+                        str = sb.toString();
+                    } else {
+                        str = o.toString();
                     }
-                    sb.append(']');
-                    str = sb.toString();
                 } catch (Exception e) {
                     str = o.toString();
                 }

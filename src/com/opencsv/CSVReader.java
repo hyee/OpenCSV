@@ -61,6 +61,16 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     }
 
     /**
+     * Constructs CSVReader from a file path with automatic charset detection.
+     *
+     * @param filePath the path to the CSV file
+     * @throws IOException if the file cannot be read
+     */
+    public CSVReader(String filePath) throws IOException {
+        this(createReaderWithDetectedCharset(filePath), CSVParser.DEFAULT_SEPARATOR, CSVParser.DEFAULT_QUOTE_CHARACTER, CSVParser.DEFAULT_ESCAPE_CHARACTER);
+    }
+
+    /**
      * Constructs CSVReader with supplied separator.
      *
      * @param reader    the reader to an underlying CSV source.
@@ -121,11 +131,12 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     /**
      * Constructs CSVReader.
      *
-     * @param reader    the reader to an underlying CSV source.
-     * @param separator the delimiter to use for separating entries
-     * @param quotechar the character to use for quoted elements
-     * @param escape    the character to use for escaping a separator or quote
-     * @param line      the line number to skip for start reading
+     * @param reader       the reader to an underlying CSV source.
+     * @param separator    the delimiter to use for separating entries
+     * @param quotechar    the character to use for quoted elements
+     * @param escape       the character to use for escaping a separator or quote
+     * @param line         the line number to skip for start reading
+     * @param strictQuotes sets if characters outside the quotes are ignored
      */
     public CSVReader(Reader reader, char separator, char quotechar, char escape, int line) {
         this(reader, separator, quotechar, escape, line, CSVParser.DEFAULT_STRICT_QUOTES);
@@ -204,6 +215,19 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         this.keepCR = keepCR;
         this.seprator = csvParser.getSeparator();
         this.verifyReader = verifyReader;
+    }
+
+    /**
+     * Creates a Reader with automatic charset detection from a file path.
+     *
+     * @param filePath the path to the CSV file
+     * @return a Reader with detected charset
+     * @throws IOException if the file cannot be read
+     */
+    private static Reader createReaderWithDetectedCharset(String filePath) throws IOException {
+        String charset = CharsetDetector.detectCharset(filePath);
+        System.out.println("    Detected charset: " + charset +" from file " + filePath);
+        return new java.io.InputStreamReader(new java.io.FileInputStream(filePath), charset);
     }
 
     /**
@@ -332,7 +356,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     /**
      * Checks to see if the file is closed.
      *
-     * @return true if the reader can no longer be read from.
+     * @return true if the file can no longer be read from.
      */
     private boolean isClosed() {
         if (!verifyReader) {
@@ -432,7 +456,8 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * the CSVReader.
      * <p/>
      * Given the following data.
-     * <code><pre>
+     * <code>
+     * <pre>
      * First line in the file
      * some other descriptive line
      * a,b,c

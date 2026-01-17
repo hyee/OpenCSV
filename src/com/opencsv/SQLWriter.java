@@ -1,7 +1,8 @@
 package com.opencsv;
 
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Writer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -35,17 +36,17 @@ public class SQLWriter extends CSVWriter {
         lineWidth = 2;
         int counter = 0;
         for (int i = 0; i < this.columnTypes.length; i++) {
-            if (titles != null && excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase()))
+            if (titles != null && i < titles.length && excludes.containsKey(titles[i].toUpperCase()) && excludes.get(titles[i].toUpperCase()))
                 continue;
             if (++counter > 1) add(separator);
             if (lineWidth > maxLineWidth) {
                 add(lineEnd).add("    ");
                 lineWidth = 4;
             }
-            if (remaps.containsKey(titles[i])) {
+            if (i < titles.length && remaps.containsKey(titles[i])) {
                 String nextElement = remaps.get(titles[i]);
                 add(nextElement == null ? "null" : nextElement);
-            } else {
+            } else if (i < nextLine.length) {
                 String nextElement = nextLine[i] == null ? null : nextLine[i].toString();
                 Boolean isString = nextElement != null && !"double".equals(this.columnTypes[i]) && !"boolean".equals(this.columnTypes[i]);
                 if (isString) {
@@ -121,13 +122,13 @@ public class SQLWriter extends CSVWriter {
 
     public int writeAll2SQL(String CSVFileSource) throws IOException {
         this.CSVFileName = CSVFileSource;
-        return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
+        return writeAll2SQL(new CSVReader(CSVFileSource));
     }
 
     public int writeAll2SQL(String CSVFileSource, ResultSet rs) throws IOException, SQLException {
         this.CSVFileName = CSVFileSource;
         if (rs != null && !rs.isClosed()) setCSVDataTypes(rs);
-        return writeAll2SQL(new CSVReader(new FileReader(CSVFileSource)));
+        return writeAll2SQL(new CSVReader(CSVFileSource));
     }
 
     public int writeAll2SQL(CSVReader reader, String headerEncloser, int maxLineWidth) throws IOException {

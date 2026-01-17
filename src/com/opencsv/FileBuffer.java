@@ -150,7 +150,7 @@ public class FileBuffer implements Closeable {
         return flush(false);
     }
 
-    private static boolean PRE_JAVA_9 = System.getProperty("java.specification.version","9").startsWith("1.");
+    private static boolean PRE_JAVA_9 = System.getProperty("java.specification.version", "9").startsWith("1.");
     private static Method cleanMethod;
     private static Method attachmentMethod;
     private static Object theUnsafe;
