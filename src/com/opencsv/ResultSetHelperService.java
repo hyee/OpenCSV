@@ -26,13 +26,7 @@ public class ResultSetHelperService implements Closeable {
     public static boolean IS_TRIM = false;
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     public static String DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
-    public int columnCount;
-    public String[] columnNames;
-    public String[] columnTypes;
-    public String[] columnClassName;
-    public int[] columnTypesI;
-    public Object[] rowObject;
-    public long cost = 0;
+    private static volatile boolean isAborted = false;
     private final ThreadLocal<SimpleDateFormat> dateFormatHolder = new ThreadLocal<>();
     private final ThreadLocal<SimpleDateFormat> timeFormatHolder = new ThreadLocal<>();
     private final ThreadLocal<DateTimeFormatter> timeTZFormatHolder = new ThreadLocal<>();
@@ -40,10 +34,17 @@ public class ResultSetHelperService implements Closeable {
     private final ConcurrentHashMap<Class<?>, Method> toDoubleArrayMethodCache = new ConcurrentHashMap<>();
     private final ResultSet rs;
     private final Object[] EOF = new Object[1];
+    private final StringBuilder sb = new StringBuilder();
+    public int columnCount;
+    public String[] columnNames;
+    public String[] columnTypes;
+    public String[] columnClassName;
+    public int[] columnTypesI;
+    public Object[] rowObject;
+    public long cost = 0;
     private ArrayBlockingQueue<Object[]> queue;
     private boolean isFinished = false;
-    private static volatile boolean isAborted = false;
-    private final StringBuilder sb = new StringBuilder();
+    private volatile Exception exception = null;
 
     /**
      * Default Constructor.
@@ -82,6 +83,7 @@ public class ResultSetHelperService implements Closeable {
                 case Types.FLOAT:
                 case Types.REAL:
                 case Types.NUMERIC:
+                case 96: //Mysql BIGINT_UNSIGNED
                     value = "double";
                     break;
                 case Types.BIGINT:
@@ -160,12 +162,12 @@ public class ResultSetHelperService implements Closeable {
         cost += System.nanoTime() - sec;
     }
 
-    public static void abort() {
-        isAborted = true;
-    }
-
     public ResultSetHelperService(ResultSet res) throws SQLException {
         this(res, RESULT_FETCH_SIZE);
+    }
+
+    public static void abort() {
+        isAborted = true;
     }
 
     /**
@@ -458,17 +460,56 @@ public class ResultSetHelperService implements Closeable {
             case "Long":
                 return ((Number) o).longValue();
             case "BigInteger":
-                if (o instanceof BigInteger) return o.toString();
-                d = ((Number) o).doubleValue();
-                if (o.toString().equals(new BigInteger(String.valueOf((long) d)))) return (long) d;
-                return o;
+                //if longValue can extractly represent the value, return longValue
+                //otherwise, return plainString
+                if (o instanceof BigInteger) {
+                    final BigInteger bi = (BigInteger) o;
+                    try {
+                        return bi.longValueExact();
+                    } catch (ArithmeticException e) {
+                        return bi.toString();
+                    }
+                }
+                return ((Number) o).longValue();
             case "BigDecimal":
-                if (o instanceof BigDecimal) return o.toString();
+                //if String.valueOf(doubleValue)|longValue can extractly represent the value, return doubleValue|longValue
+                //otherwise, return plainString
+                BigDecimal bd;
+                String doubleStr;
+                if (o instanceof BigDecimal) {
+                    bd = (BigDecimal) o;
+                    try {
+                        return bd.longValueExact();
+                    } catch (ArithmeticException e) {
+                        d = bd.doubleValue();
+                        doubleStr = Double.toString(d);
+                        if (Double.isFinite(d)
+                                && bd.compareTo(BigDecimal.valueOf(d)) == 0
+                                && doubleStr.indexOf('E') < 0
+                                && doubleStr.indexOf('e') < 0) {
+                            return d;
+                        }
+                    }
+                    return bd.toPlainString();
+                } else if (o instanceof BigInteger) {
+                    final BigInteger bi = (BigInteger) o;
+                    try {
+                        return bi.longValueExact();
+                    } catch (ArithmeticException e) {
+                        return bi.toString();
+                    }
+                }
                 d = ((Number) o).doubleValue();
-                final long l = (long) d;
-                if (d == l && o.toString().equals(BigInteger.valueOf(l))) return l;
-                if (o.toString().equals(BigDecimal.valueOf(d).toString())) return d;
-                return o.toString();
+                if (Math.floor(d) == Math.ceil(d)) ((Number) o).longValue();
+                doubleStr = Double.toString(d);
+                bd = BigDecimal.valueOf(d);
+                if (Double.isFinite(d)
+                        && bd.compareTo(new BigDecimal(doubleStr)) == 0
+                        && doubleStr.indexOf('E') < 0
+                        && doubleStr.indexOf('e') < 0) {
+                    return d;
+                }
+                return bd.toPlainString();
             case "date":
                 str = handleDate((Date) o, dateFormatString);
                 break;
@@ -565,14 +606,12 @@ public class ResultSetHelperService implements Closeable {
             default:
                 if (o instanceof Number) {
                     d = ((Number) o).doubleValue();
-                    return d == (long) d ? (long) d : d;
+                    return Math.floor(d) == Math.ceil(d) ? ((Number) o).longValue() : d;
                 }
                 str = o.toString();
         }
         return trim ? str.trim() : str;
     }
-
-    private volatile Exception exception = null;
 
     public void startAsyncFetch(final RowCallback callback, final boolean trim, final String dateFormatString, final String timeFormatString, int fetchRows) throws Exception {
         if (fetchRows == -1) queue = new ArrayBlockingQueue<>(RESULT_FETCH_SIZE * 2 + 10);
@@ -624,7 +663,7 @@ public class ResultSetHelperService implements Closeable {
     }
 
     public Object[][] fetchRowsAsync(int rows) throws Exception {
-        final ArrayList<Object[]> ary = new ArrayList();
+        final ArrayList<Object[]> ary = new ArrayList<>();
         //ary.add(columnNames);
         startAsyncFetch(row -> ary.add(row.clone()), false, DEFAULT_DATE_FORMAT, DEFAULT_TIMESTAMP_FORMAT, rows);
         return ary.toArray(new Object[][]{});
@@ -632,7 +671,7 @@ public class ResultSetHelperService implements Closeable {
 
     public Object[][] fetchRows(int rows) throws Exception {
         queue = null;
-        final ArrayList<Object[]> ary = new ArrayList();
+        final ArrayList<Object[]> ary = new ArrayList<>();
         Object[] row;
         int counter = 0;
         if (rows > 0) rs.setFetchSize(rows <= 1000 ? rows : rows / 2);

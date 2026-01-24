@@ -1,28 +1,29 @@
 package com.opencsv;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnsupportedCharsetException;
 import java.util.Arrays;
 
 public class CharsetDetector {
     private static final int BUFFER_SIZE = 8192;
     private static final Charset[] COMMON_CHARSETS = {
-        StandardCharsets.UTF_8,
-        Charset.forName("GBK"),
-        Charset.forName("GB18030"),
-        Charset.forName("BIG5"),
-        Charset.forName("BIG5-HKSCS"),
-        StandardCharsets.ISO_8859_1,
-        Charset.forName("ISO-8859-15"),
-        Charset.forName("Windows-1252"),
-        Charset.forName("Shift_JIS"),
-        Charset.forName("EUC-JP"),
-        Charset.forName("Windows-1251"),
-        Charset.forName("KOI8-R"),
-        Charset.forName("ISO-8859-5"),
-        StandardCharsets.US_ASCII
+            StandardCharsets.UTF_8,
+            Charset.forName("GBK"),
+            Charset.forName("GB18030"),
+            Charset.forName("BIG5"),
+            Charset.forName("BIG5-HKSCS"),
+            StandardCharsets.ISO_8859_1,
+            Charset.forName("ISO-8859-15"),
+            Charset.forName("Windows-1252"),
+            Charset.forName("Shift_JIS"),
+            Charset.forName("EUC-JP"),
+            Charset.forName("Windows-1251"),
+            Charset.forName("KOI8-R"),
+            Charset.forName("ISO-8859-5"),
+            StandardCharsets.US_ASCII
     };
 
     private static final int CJK_START = 0x4E00;
@@ -53,7 +54,7 @@ public class CharsetDetector {
 
     public static String detectCharset(File file, String defaultCharset) throws IOException {
         byte[] buffer = readFileSample(file);
-        
+
         String charsetFromBOM = getCharsetFromBOM(buffer);
         if (charsetFromBOM != null) {
             return charsetFromBOM;
@@ -184,8 +185,8 @@ public class CharsetDetector {
                 score += cjkChars;
             }
 
-            if ((hiraganaChars > 0 || katakanaChars > 0) && 
-                (charset.name().equals("Shift_JIS") || charset.name().equals("EUC-JP"))) {
+            if ((hiraganaChars > 0 || katakanaChars > 0) &&
+                    (charset.name().equals("Shift_JIS") || charset.name().equals("EUC-JP"))) {
                 score += (hiraganaChars + katakanaChars) * 2;
                 score += cjkChars * 2;
             }
@@ -195,8 +196,8 @@ public class CharsetDetector {
                 score += cjkChars;
             }
 
-            if (cyrillicChars > 0 && 
-                (charset.name().equals("Windows-1251") || charset.name().equals("KOI8-R") || charset.name().equals("ISO-8859-5"))) {
+            if (cyrillicChars > 0 &&
+                    (charset.name().equals("Windows-1251") || charset.name().equals("KOI8-R") || charset.name().equals("ISO-8859-5"))) {
                 score += cyrillicChars * 2;
             }
 
@@ -204,8 +205,8 @@ public class CharsetDetector {
                 score += cyrillicChars;
             }
 
-            if (latinExtendedChars > 0 && 
-                (charset.equals(StandardCharsets.ISO_8859_1) || charset.name().equals("ISO-8859-15") || charset.name().equals("Windows-1252"))) {
+            if (latinExtendedChars > 0 &&
+                    (charset.equals(StandardCharsets.ISO_8859_1) || charset.name().equals("ISO-8859-15") || charset.name().equals("Windows-1252"))) {
                 score += latinExtendedChars;
             }
 
@@ -213,42 +214,42 @@ public class CharsetDetector {
                 score += latinExtendedChars / 2;
             }
 
-            if (cyrillicChars > 0 && 
-                (charset.equals(StandardCharsets.ISO_8859_1) || 
-                 charset.equals(StandardCharsets.US_ASCII) ||
-                 charset.name().equals("Windows-1252") ||
-                 charset.name().equals("ISO-8859-15"))) {
+            if (cyrillicChars > 0 &&
+                    (charset.equals(StandardCharsets.ISO_8859_1) ||
+                            charset.equals(StandardCharsets.US_ASCII) ||
+                            charset.name().equals("Windows-1252") ||
+                            charset.name().equals("ISO-8859-15"))) {
                 score -= cyrillicChars * 5;
             }
 
-            if (cjkChars > 0 && (charset.equals(StandardCharsets.ISO_8859_1) || 
-                                  charset.equals(StandardCharsets.US_ASCII) ||
-                                  charset.name().equals("Windows-1252") ||
-                                  charset.name().equals("ISO-8859-15"))) {
+            if (cjkChars > 0 && (charset.equals(StandardCharsets.ISO_8859_1) ||
+                    charset.equals(StandardCharsets.US_ASCII) ||
+                    charset.name().equals("Windows-1252") ||
+                    charset.name().equals("ISO-8859-15"))) {
                 score -= cjkChars * 5;
             }
 
-            if ((hiraganaChars > 0 || katakanaChars > 0) && 
-                (charset.equals(StandardCharsets.ISO_8859_1) || 
-                 charset.equals(StandardCharsets.US_ASCII) ||
-                 charset.name().equals("Windows-1252") ||
-                 charset.name().equals("ISO-8859-15") ||
-                 charset.name().equals("GBK") ||
-                 charset.name().equals("GB18030") ||
-                 charset.name().equals("BIG5") ||
-                 charset.name().equals("BIG5-HKSCS"))) {
+            if ((hiraganaChars > 0 || katakanaChars > 0) &&
+                    (charset.equals(StandardCharsets.ISO_8859_1) ||
+                            charset.equals(StandardCharsets.US_ASCII) ||
+                            charset.name().equals("Windows-1252") ||
+                            charset.name().equals("ISO-8859-15") ||
+                            charset.name().equals("GBK") ||
+                            charset.name().equals("GB18030") ||
+                            charset.name().equals("BIG5") ||
+                            charset.name().equals("BIG5-HKSCS"))) {
                 score -= (hiraganaChars + katakanaChars) * 5;
             }
 
-            if (cyrillicChars > 0 && 
-                (charset.equals(StandardCharsets.ISO_8859_1) || 
-                 charset.equals(StandardCharsets.US_ASCII) ||
-                 charset.name().equals("Windows-1252") ||
-                 charset.name().equals("ISO-8859-15") ||
-                 charset.name().equals("GBK") ||
-                 charset.name().equals("GB18030") ||
-                 charset.name().equals("BIG5") ||
-                 charset.name().equals("BIG5-HKSCS"))) {
+            if (cyrillicChars > 0 &&
+                    (charset.equals(StandardCharsets.ISO_8859_1) ||
+                            charset.equals(StandardCharsets.US_ASCII) ||
+                            charset.name().equals("Windows-1252") ||
+                            charset.name().equals("ISO-8859-15") ||
+                            charset.name().equals("GBK") ||
+                            charset.name().equals("GB18030") ||
+                            charset.name().equals("BIG5") ||
+                            charset.name().equals("BIG5-HKSCS"))) {
                 score -= cyrillicChars * 5;
             }
 
@@ -263,8 +264,8 @@ public class CharsetDetector {
     }
 
     private static boolean isCJKCharacter(char c) {
-        return (c >= CJK_START && c <= CJK_END) || 
-               (c >= CJK_EXT_A_START && c <= CJK_EXT_A_END);
+        return (c >= CJK_START && c <= CJK_END) ||
+                (c >= CJK_EXT_A_START && c <= CJK_EXT_A_END);
     }
 
     private static boolean isHiragana(char c) {
@@ -281,15 +282,15 @@ public class CharsetDetector {
 
     private static boolean isLatinExtended(char c) {
         return (c >= LATIN_EXTENDED_A_START && c <= LATIN_EXTENDED_A_END) ||
-               (c >= LATIN_EXTENDED_B_START && c <= LATIN_EXTENDED_B_END);
+                (c >= LATIN_EXTENDED_B_START && c <= LATIN_EXTENDED_B_END);
     }
 
     private static boolean isASCIICommonChar(char c) {
-        return (c >= 'a' && c <= 'z') || 
-               (c >= 'A' && c <= 'Z') || 
-               (c >= '0' && c <= '9') ||
-               c == ' ' || c == ',' || c == '.' || c == ';' || c == ':' || 
-               c == '-' || c == '_' || c == '(' || c == ')';
+        return (c >= 'a' && c <= 'z') ||
+                (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') ||
+                c == ' ' || c == ',' || c == '.' || c == ';' || c == ':' ||
+                c == '-' || c == '_' || c == '(' || c == ')';
     }
 
     private static boolean isASCIIPrintable(char c) {

@@ -1,8 +1,6 @@
 package com.opencsv;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.Writer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -154,7 +152,7 @@ public class SQLWriter extends CSVWriter {
                         }
                     if (!match) types[j] = null;
                 }
-                createOracleCtlFileFromHeaders(CSVFileName, array, types, reader.getParser().getQuotechar(), reader.seprator, "\\r\\n");
+                createOracleCtlFileFromHeaders(CSVFileName, array, types, reader.getParser().getQuotechar(), reader.separator, "\\r\\n");
                 array = cols.toArray(new String[cols.size()]);
             }
             init(array, headerEncloser, maxLineWidth);

@@ -342,7 +342,7 @@ public class CSVParser {
         if (pending != null) {
             sb.append(pending);
             pending = null;
-            inQuotes = !this.ignoreQuotations;//true;
+            inQuotes = !this.ignoreQuotations;
         }
         for (int i = 0; i < nextLine.length(); i++) {
 
