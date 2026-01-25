@@ -1,4 +1,4 @@
-package com.opencsv;
+package com.opencsv.util;
 
 import java.io.File;
 import java.io.FileInputStream;

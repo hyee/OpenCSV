@@ -2,48 +2,73 @@ package com.opencsv;
 
 import java.io.OutputStream;
 import java.sql.Connection;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
  * DBLoaderConfig - Configuration class for DBLoader.
  * This class encapsulates all the configuration parameters for DBLoader,
- * providing a cleaner and more maintainable way to configure the loader.
+ * providing a cleaner and more maintainable way to configure the CSV to database loader.
+ * <p>
+ * DBLoaderConfig provides comprehensive configuration options for:
+ * - CSV parsing (delimiter, enclosure, escape, encoding, skip lines)
+ * - Database interaction (batch size, transaction management, progress reporting)
+ * - Data type handling (date formats, timestamp formats, type detection)
+ * - Table management (create table, truncate table)
+ * - Performance optimization (scan rows, row limits, error handling)
+ * - Output control (logging, SQL generation, progress reporting)
+ * <p>
+ * All configuration options support case-insensitive string values where applicable.
  */
 public class DBLoaderConfig {
     // Configuration option constants
     /**
      * Configuration option for the number of rows to scan for type detection.
+     * Default: 200
      */
     public static final String SCAN_ROWS = "SCAN_ROWS";
 
     /**
      * Configuration option for column size mode (ACTUAL or MAXIMUM).
+     * - ACTUAL: Use the actual size of the longest value in the column
+     * - MAXIMUM: Use the maximum size supported by the data type
+     * Default: MAXIMUM
      */
     public static final String COLUMN_SIZE = "COLUMN_SIZE";
 
     /**
      * Configuration option for date format string.
+     * Use "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public static final String DATE_FORMAT = "DATE_FORMAT";
 
     /**
      * Configuration option for timestamp format string.
+     * Use "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public static final String TIMESTAMP_FORMAT = "TIMESTAMP_FORMAT";
 
     /**
      * Configuration option for timestamp with timezone format string.
+     * Use "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public static final String TIMESTAMPTZ_FORMAT = "TIMESTAMPTZ_FORMAT";
 
     /**
      * Configuration option for locale to use for date and timestamp parsing.
+     * Use "auto" for system default locale.
+     * Default: null (system default locale)
      */
     public static final String LOCALE = "LOCALE";
 
     /**
      * Configuration option for mapping CSV column names to database column names.
+     * Expected value: Map<String, String> where key is CSV column name and value is database column name
      */
     public static final String MAP_COLUMN_NAMES = "MAP_COLUMN_NAMES";
 
@@ -144,111 +169,207 @@ public class DBLoaderConfig {
     public static final String LOGGER = "LOGGER";
     public final static String SKIP_COLUMNS_AUTO = "__AUTO__";
     /**
+     * Cache for custom datetime formatters.
+     */
+    public final Map<String, DateTimeFormatter> dateTimeFormatters = new HashMap<>();
+    /**
+     * Cache for custom time formatters.
+     */
+    public final Map<String, DateTimeFormatter> timeFormatters = new HashMap<>();
+    /**
+     * Cache for runtime datetime formatters.
+     */
+    public final Map<String, DateTimeFormatter> runtimeDateTimeFormatterCache = new HashMap<>();
+    /**
+     * Cache for runtime time formatters.
+     */
+    public final Map<String, DateTimeFormatter> runtimeTimeFormatterCache = new HashMap<>();
+    /**
      * Whether the CSV file has a header row.
+     * Default: true
      */
     public boolean hasHeader = true;
     /**
      * Number of rows to batch before committing.
+     * Default: 2048
      */
     public int batchSize;
     /**
      * Byte interval for progress logging.
+     * Set to -1 to disable all progress reporting.
+     * Default: 10MB (10 * 1024 * 1024 bytes)
      */
     public long progressIntervalBytes;
     /**
      * Maximum number of rows to process (0 for no limit).
+     * Default: 0 (unlimited)
      */
     public int rowLimit;
     /**
-     * Character to use for separating entries.
+     * Character to use for separating entries in CSV file.
+     * Default: CSVParser.DEFAULT_SEPARATOR (',')
      */
     public char delimiter;
     /**
-     * Character to use for quoted elements.
+     * Character to use for quoted elements in CSV file.
+     * Default: CSVParser.DEFAULT_QUOTE_CHARACTER ('"')
      */
     public char quotechar;
     /**
-     * Character to use for escaping a separator or quote.
+     * Character to use for escaping a separator or quote in CSV file.
+     * Default: CSVParser.DEFAULT_ESCAPE_CHARACTER ('\\')
      */
     public char escape;
     /**
      * Number of lines to skip at start of CSV file.
+     * Default: CSVReader.DEFAULT_SKIP_LINES (0)
+     * Note: If hasHeader is true, this is automatically set to 1
      */
     public int skipLines;
     /**
-     * Charset to use for reading the CSV file (null/empty/"auto" for auto-detection).
+     * Charset to use for reading the CSV file.
+     * Use null, empty string, or "auto" for automatic charset detection.
+     * Default: null (auto-detection)
      */
     public String encoding;
     /**
      * Map of CSV column names to database column names.
+     * Key: CSV column name
+     * Value: Database column name
+     * Default: null (no mapping)
      */
     public Map<String, String> columnNameMap;
     /**
-     * Number of rows to scan for type detection.
+     * Number of rows to scan for type detection during DDL generation.
+     * Default: 200
      */
     public int scanRows;
     /**
-     * Column size mode (ACTUAL or MAXIMUM).
+     * Column size mode for DDL generation.
+     * - ACTUAL: Use the actual size of the longest value in the column
+     * - MAXIMUM: Use the maximum size supported by the data type
+     * Default: MAXIMUM
      */
     public String columnSize;
     /**
-     * Date format string for parsing dates.
+     * Date format string for parsing date values.
+     * Use null or "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public String dateFormat;
     /**
-     * Timestamp format string for parsing timestamps.
+     * Timestamp format string for parsing timestamp values.
+     * Use null or "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public String timestampFormat;
     /**
-     * Timestamp with timezone format string for parsing timestamps with timezone.
+     * Timestamp with timezone format string for parsing timestamp with timezone values.
+     * Use null or "auto" for automatic format detection.
+     * Default: null (auto-detection)
      */
     public String timestamptzFormat;
     /**
-     * Controls what to display.
+     * Controls what SQL statements to display and whether to execute them.
+     * Possible values:
+     * - "TRUE", "1", "YES", "Y", "ON": Show DDL and INSERT statements, then exit
+     * - "ALL": Show DDL and INSERT statements, then exit
+     * - "DDL": Show DDL statement only, then exit
+     * - "DML": Show INSERT statement only, then exit
+     * - "FALSE", "0", "NO", "N", "OFF": Execute statements normally
+     * Default: "OFF"
      */
     public String show;
     /**
-     * Whether to generate DDL and create table.
+     * Whether to generate DDL and create table before importing data.
+     * Default: false
      */
     public boolean create;
     /**
-     * Whether to truncate target table.
+     * Whether to truncate target table before importing data.
+     * Default: false
      */
     public boolean truncate;
     /**
-     * Maximum number of errors allowed.
+     * Maximum number of errors allowed before stopping import.
+     * Set to -1 for unlimited errors.
+     * Default: -1 (unlimited)
      */
     public int errors;
     /**
-     * Locale to use for date and timestamp parsing.
+     * Locale name to use for date and timestamp parsing.
+     * Default: empty string (system default locale)
      */
     public String localeName;
+    /**
+     * Locale object to use for date and timestamp parsing.
+     * Default: Locale.getDefault()
+     */
     public Locale locale;
     /**
-     * Database platform.
+     * Database platform name.
+     * Possible values: "oracle", "mysql", "db2", "mssql", "sqlserver", "pgsql", "postgresql"
+     * Default: null (auto-detected from connection metadata)
      */
     public String platform;
+    /**
+     * Whether to unescape newline characters in CSV data (\n to actual newline).
+     * Default: true
+     */
     public boolean unescapeNewline;
     /**
-     * Variable placeholder format. : or ?
+     * Variable placeholder format for SQL statements.
+     * - '?': Use JDBC standard placeholders
+     * - ':': Use Oracle-style placeholders (:1, :2, :3, etc.)
+     * Default: '?'
      */
     public char variableFormat;
+    /**
+     * Map of column names to skip during import.
+     * Special value SKIP_COLUMNS_AUTO ("__AUTO__") enables automatic skipping of non-existent columns
+     * Default: {SKIP_COLUMNS_AUTO: "true"}
+     */
     public Map<String, String> skipColumns = new java.util.HashMap<>();
     /**
-     * SQL query to retrieve column informations,if not specified then Connection.getMetaData().getColumns() will be used.
-     * The query must return the following columns, it accepts no bind variables:
-     * - COLUMN_NAME(String): The name of the column.
-     * - DATA_TYPE(int): The data type of the column(Refer to java.sql.Types).
-     * - TYPE_NAME(String): The name of the data type.
-     * - COLUMN_SIZE(int): The size of the column.
+     * SQL query to retrieve column information.
+     * If not specified, Connection.getMetaData().getColumns() will be used instead.
+     * The query must return the following columns and accepts no bind variables:
+     * - COLUMN_NAME(String): The name of the column
+     * - DATA_TYPE(int): The data type code from java.sql.Types
+     * - TYPE_NAME(String): The database-specific data type name
+     * - COLUMN_SIZE(int): The size of the column
+     * Default: null
      */
     public String columnInfoSQL;
+    /**
+     * Array of database table column names (populated during import).
+     */
     public String[] tableColumns;
+    /**
+     * Array of SQL data types for each column (populated during import).
+     * Values are from java.sql.Types.
+     */
     public Integer[] columnTypes;
+    /**
+     * Array of database-specific type names for each column (populated during import).
+     */
     public String[] columnTypeNames;
+    /**
+     * Array of column sizes (populated during import).
+     */
     public Integer[] columnSizes;
+    /**
+     * Array of CSV column indices mapped to database columns (populated during import).
+     */
     public Integer[] csvColumns;
+    /**
+     * Array of CSV header names (populated during import).
+     */
     public String[] csvHeaders;
+    /**
+     * OutputStream for logging messages.
+     * Default: System.out
+     */
     public OutputStream logger;
 
     /**
@@ -443,6 +564,7 @@ public class DBLoaderConfig {
                 if (skipColumnsOption.equalsIgnoreCase("off")) {
                     config.skipColumns.clear();
                 } else if (skipColumnsOption.startsWith("(") && skipColumnsOption.endsWith(")")) {
+                    config.skipColumns.clear();
                     skipColumnsOption = skipColumnsOption.substring(1, skipColumnsOption.length() - 1);
                     String[] skipColumns = skipColumnsOption.split(",");
                     for (String skipColumn : skipColumns) {
@@ -557,13 +679,24 @@ public class DBLoaderConfig {
         if (progressIntervalBytes < 0) {
             return;
         }
-        if (logger.equals(System.out)) {
+        if (logger.equals(System.out) || logger.equals(System.err)) {
             message = "    " + (message.trim().replaceAll("\n", "\n    "));
         }
         try {
             logger.write((message + "\n").getBytes());
         } catch (Exception e) {
             throw new RuntimeException("Failed to write log message", e);
+        }
+    }
+
+    public void close() {
+        try {
+            if (logger != null && !(logger.equals(System.out) && !logger.equals(System.err))) {
+                logger.close();
+                logger = null;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to close logger", e);
         }
     }
 }

@@ -17,6 +17,7 @@ package com.opencsv;
  */
 
 import com.opencsv.stream.reader.LineReader;
+import com.opencsv.util.CharsetDetector;
 
 import java.io.BufferedReader;
 import java.io.Closeable;

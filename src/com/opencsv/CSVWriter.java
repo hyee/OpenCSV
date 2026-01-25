@@ -54,7 +54,7 @@ public class CSVWriter implements Closeable {
     protected int totalRows;
     protected int incrRows;
     protected String lineEnd;
-    protected PrintWriter logWriter;
+    protected OutputStream logWriter = null;
     protected String CSVFileName;
     protected ResultSetHelperService resultService;
     protected FileBuffer buffer;
@@ -78,8 +78,6 @@ public class CSVWriter implements Closeable {
         String extensionName = "csv";
         if (quotechar == '\'' && escapechar == quotechar) extensionName = "sql";
         buffer = new FileBuffer(INITIAL_BUFFER_SIZE, fileName, extensionName);
-        logWriter = new PrintWriter(new OutputStreamWriter(new FileOutputStream(buffer.file.getParentFile().getAbsolutePath() + File.separator + buffer.fileName + ".log"), "UTF-8"));
-        //logWriter = new PrintWriter(System.err);
     }
 
     public CSVWriter(String fileName) throws IOException {
@@ -182,13 +180,21 @@ public class CSVWriter implements Closeable {
         return add(sbf.toString());
     }
 
+    public void setlogWriter(OutputStream logWriter) {
+        this.logWriter = logWriter;
+    }
+
     protected void writeLog(int rows) {
-        String msg = String.format("%s: %d rows extracted, total: %d rows, %.2f MB, %.3f secs on fetching.", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()), rows - incrRows, rows, (float) buffer.position / 1024 / 1024, resultService == null ? 0f : (float) resultService.cost / 1e9);
-        logWriter.write(msg + "\n");
-        logWriter.flush();
-        System.out.println("    " + msg);
-        System.out.flush();
-        incrRows = rows;
+        if (this.logWriter == null) return;
+        String msg = String.format("%s: %d rows extracted, total: %d rows, %.2f MB, %.3f secs on fetching.\n", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()), rows - incrRows, rows, (float) buffer.position / 1024 / 1024, resultService == null ? 0f : (float) resultService.cost / 1e9);
+        try {
+            if (logWriter.equals(System.out) || logWriter.equals(System.err)) {
+                logWriter.write(("    " + msg).getBytes());
+            } else {
+                logWriter.write(msg.getBytes());
+            }
+            logWriter.flush();
+        } catch (Exception e) {}
     }
 
     /**
@@ -378,7 +384,9 @@ public class CSVWriter implements Closeable {
      */
     public void close() throws IOException {
         flush(true);
-        logWriter.close();
+        if(!logWriter.equals(System.out)&&!logWriter.equals(System.err)) {
+            logWriter.close();
+        }
         buffer.close();
         resultService = null;
         System.gc();

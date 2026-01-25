@@ -1,7 +1,6 @@
 package com.opencsv;
 
 import java.io.File;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.time.*;
@@ -30,12 +29,26 @@ import java.util.stream.Stream;
  * - Error handling with .bad file output for failed rows
  * - Transaction management with commit/rollback
  * - Database-specific column quoting (MySQL, PostgreSQL, SQL Server, Oracle)
+ * - Comprehensive configuration via {@link DBLoaderConfig} class
  * <p>
- * Example usage:
+ * Example usage with DBLoaderConfig:
  * <pre>
  * Connection conn = DriverManager.getConnection(url, user, password);
- * DBLoader loader = new DBLoader(conn, "my_table", "data.csv", true);
- * int rowsLoaded = loader.load();
+ * DBLoaderConfig config = new DBLoaderConfig();
+ * config.batchSize = 1000;
+ * config.create = true;
+ * DBLoader loader = new DBLoader(conn, "my_table", "data.csv", config);
+ * long rowsLoaded = loader.load();
+ * System.out.println("Loaded " + rowsLoaded + " rows");
+ * </pre>
+ * <p>
+ * Example usage with options map:
+ * <pre>
+ * Connection conn = DriverManager.getConnection(url, user, password);
+ * Map<String, Object> options = new HashMap<>();
+ * options.put(DBLoaderConfig.BATCH_ROWS, 1000);
+ * options.put(DBLoaderConfig.CREATE, true);
+ * long rowsLoaded = DBLoader.importCSVData(conn, "my_table", "data.csv", options);
  * System.out.println("Loaded " + rowsLoaded + " rows");
  * </pre>
  */
@@ -43,10 +56,6 @@ public class DBLoader {
     private static final int MAX_BLOB_SIZE = 10 * 1024 * 1024;
     private static final Map<String, DateTimeFormatter> DATETIME_FORMATTER_CACHE = new HashMap<>();
     private static final Map<String, DateTimeFormatter> TIME_FORMATTER_CACHE = new HashMap<>();
-    private static final Map<String, DateTimeFormatter> CUSTOM_DATETIME_FORMATTER_CACHE = new HashMap<>();
-    private static final Map<String, DateTimeFormatter> CUSTOM_TIME_FORMATTER_CACHE = new HashMap<>();
-    private static final Map<String, DateTimeFormatter> RUNTIME_DATETIME_FORMATTER_CACHE = new HashMap<>();
-    private static final Map<String, DateTimeFormatter> RUNTIME_TIME_FORMATTER_CACHE = new HashMap<>();
 
     static {
         final String[] orgStrings = {
@@ -65,7 +74,12 @@ public class DBLoader {
                         .distinct().toArray(String[]::new);
 
         final String[] DateSeps = {
-                " ", "'T'"
+                " ", "T"
+        };
+
+        final String[] TimeStrings = {
+                "HH:mm:ss",
+                "hh:mm:ss a"
         };
 
         final String[] zoneSeps = {
@@ -92,38 +106,39 @@ public class DBLoader {
                     DATETIME_FORMATTER_CACHE.put(dateString + zoneSep + zoneString, formatter);
                     //DateStrings with time
                     for (String dateSep : DateSeps) {
-                        //With us
-                        formatter = new DateTimeFormatterBuilder()
-                                .appendPattern(dateString)
-                                .optionalStart()
-                                .appendLiteral(dateSep)
-                                .appendPattern("HH:mm:ss")
-                                .optionalStart()
-                                .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-                                .optionalStart()
-                                .appendLiteral(zoneSep)
-                                .appendPattern(zoneString)
-                                .optionalEnd()
-                                .optionalEnd()
-                                .optionalEnd()
-                                .toFormatter()
-                                .withResolverStyle(ResolverStyle.LENIENT);
-                        DATETIME_FORMATTER_CACHE.put(dateString + dateSep + "HH:mm:ss.SSSSS" + zoneSep + zoneString, formatter);
+                        for (String timeString : TimeStrings) {
+                            formatter = new DateTimeFormatterBuilder()
+                                    .appendPattern(dateString)
+                                    .optionalStart()
+                                    .appendLiteral(dateSep)
+                                    .appendPattern(timeString)
+                                    .optionalStart()
+                                    .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+                                    .optionalStart()
+                                    .appendLiteral(zoneSep)
+                                    .appendPattern(zoneString)
+                                    .optionalEnd()
+                                    .optionalEnd()
+                                    .optionalEnd()
+                                    .toFormatter()
+                                    .withResolverStyle(ResolverStyle.LENIENT);
+                            DATETIME_FORMATTER_CACHE.put(dateString + dateSep + timeString + ".SSSSS" + zoneSep + zoneString, formatter);
 
-                        //Without us
-                        formatter = new DateTimeFormatterBuilder()
-                                .appendPattern(dateString)
-                                .optionalStart()
-                                .appendLiteral(dateSep)
-                                .appendPattern("HH:mm:ss")
-                                .optionalStart()
-                                .appendLiteral(zoneSep)
-                                .appendPattern(zoneString)
-                                .optionalEnd()
-                                .optionalEnd()
-                                .toFormatter()
-                                .withResolverStyle(ResolverStyle.LENIENT);
-                        DATETIME_FORMATTER_CACHE.put(dateString + dateSep + "HH:mm:ss" + zoneSep + zoneString, formatter);
+                            //Without us
+                            formatter = new DateTimeFormatterBuilder()
+                                    .appendPattern(dateString)
+                                    .optionalStart()
+                                    .appendLiteral(dateSep)
+                                    .appendPattern(timeString)
+                                    .optionalStart()
+                                    .appendLiteral(zoneSep)
+                                    .appendPattern(zoneString)
+                                    .optionalEnd()
+                                    .optionalEnd()
+                                    .toFormatter()
+                                    .withResolverStyle(ResolverStyle.LENIENT);
+                            DATETIME_FORMATTER_CACHE.put(dateString + dateSep + timeString + zoneSep + zoneString, formatter);
+                        }
                     }
                 }
             }
@@ -146,40 +161,42 @@ public class DBLoader {
                 DATETIME_FORMATTER_CACHE.put(name + zoneSep + zoneString, formatter);
                 //DateStrings with time
                 for (String dateSep : DateSeps) {
-                    //With us
-                    formatter = new DateTimeFormatterBuilder()
-                            .appendPattern(dateString)
-                            .appendValueReduced(ChronoField.YEAR, 2, 2, LocalDate.now().getYear() - 50)
-                            .optionalStart()
-                            .appendLiteral(dateSep)
-                            .appendPattern("HH:mm:ss")
-                            .optionalStart()
-                            .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-                            .optionalStart()
-                            .appendLiteral(zoneSep)
-                            .appendPattern(zoneString)
-                            .optionalEnd()
-                            .optionalEnd()
-                            .optionalEnd()
-                            .toFormatter(Locale.ENGLISH)
-                            .withResolverStyle(ResolverStyle.LENIENT);
-                    DATETIME_FORMATTER_CACHE.put(name + dateSep + "HH:mm:ss.SSSSS" + zoneSep + zoneString, formatter);
+                    for (String timeString : TimeStrings) {
+                        //With us
+                        formatter = new DateTimeFormatterBuilder()
+                                .appendPattern(dateString)
+                                .appendValueReduced(ChronoField.YEAR, 2, 2, LocalDate.now().getYear() - 50)
+                                .optionalStart()
+                                .appendLiteral(dateSep)
+                                .appendPattern(timeString)
+                                .optionalStart()
+                                .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+                                .optionalStart()
+                                .appendLiteral(zoneSep)
+                                .appendPattern(zoneString)
+                                .optionalEnd()
+                                .optionalEnd()
+                                .optionalEnd()
+                                .toFormatter(Locale.ENGLISH)
+                                .withResolverStyle(ResolverStyle.LENIENT);
+                        DATETIME_FORMATTER_CACHE.put(name + dateSep + timeString + ".SSSSS" + zoneSep + zoneString, formatter);
 
-                    //Without us
-                    formatter = new DateTimeFormatterBuilder()
-                            .appendPattern(dateString)
-                            .appendValueReduced(ChronoField.YEAR, 2, 2, LocalDate.now().getYear() - 50)
-                            .optionalStart()
-                            .appendLiteral(dateSep)
-                            .appendPattern("HH:mm:ss")
-                            .optionalStart()
-                            .appendLiteral(zoneSep)
-                            .appendPattern(zoneString)
-                            .optionalEnd()
-                            .optionalEnd()
-                            .toFormatter(Locale.ENGLISH)
-                            .withResolverStyle(ResolverStyle.LENIENT);
-                    DATETIME_FORMATTER_CACHE.put(name + dateSep + "HH:mm:ss" + zoneSep + zoneString, formatter);
+                        //Without us
+                        formatter = new DateTimeFormatterBuilder()
+                                .appendPattern(dateString)
+                                .appendValueReduced(ChronoField.YEAR, 2, 2, LocalDate.now().getYear() - 50)
+                                .optionalStart()
+                                .appendLiteral(dateSep)
+                                .appendPattern(timeString)
+                                .optionalStart()
+                                .appendLiteral(zoneSep)
+                                .appendPattern(zoneString)
+                                .optionalEnd()
+                                .optionalEnd()
+                                .toFormatter(Locale.ENGLISH)
+                                .withResolverStyle(ResolverStyle.LENIENT);
+                        DATETIME_FORMATTER_CACHE.put(name + dateSep + timeString + zoneSep + zoneString, formatter);
+                    }
                 }
             }
         }
@@ -188,30 +205,32 @@ public class DBLoader {
         //TimeStrings
         for (String zoneSep : zoneSeps) {
             for (String zoneString : zoneStrings) {
-                //With us
-                formatter = new DateTimeFormatterBuilder()
-                        .appendPattern("HH:mm:ss")
-                        .optionalStart()
-                        .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-                        .optionalStart()
-                        .appendLiteral(zoneSep)
-                        .appendPattern(zoneString)
-                        .optionalEnd()
-                        .optionalEnd()
-                        .toFormatter()
-                        .withResolverStyle(ResolverStyle.LENIENT);
-                TIME_FORMATTER_CACHE.put("HH:mm:ss.SSSSS" + zoneSep + zoneString, formatter);
+                for (String timeString : TimeStrings) {
+                    //With us
+                    formatter = new DateTimeFormatterBuilder()
+                            .appendPattern(timeString)
+                            .optionalStart()
+                            .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+                            .optionalStart()
+                            .appendLiteral(zoneSep)
+                            .appendPattern(zoneString)
+                            .optionalEnd()
+                            .optionalEnd()
+                            .toFormatter()
+                            .withResolverStyle(ResolverStyle.LENIENT);
+                    TIME_FORMATTER_CACHE.put(timeString + ".SSSSS" + zoneSep + zoneString, formatter);
 
-                //Without us
-                formatter = new DateTimeFormatterBuilder()
-                        .appendPattern("HH:mm:ss")
-                        .optionalStart()
-                        .appendLiteral(zoneSep)
-                        .appendPattern(zoneString)
-                        .optionalEnd()
-                        .toFormatter()
-                        .withResolverStyle(ResolverStyle.LENIENT);
-                TIME_FORMATTER_CACHE.put("HH:mm:ss" + zoneSep + zoneString, formatter);
+                    //Without us
+                    formatter = new DateTimeFormatterBuilder()
+                            .appendPattern("HH:mm:ss")
+                            .optionalStart()
+                            .appendLiteral(zoneSep)
+                            .appendPattern(zoneString)
+                            .optionalEnd()
+                            .toFormatter()
+                            .withResolverStyle(ResolverStyle.LENIENT);
+                    TIME_FORMATTER_CACHE.put(timeString + zoneSep + zoneString, formatter);
+                }
             }
         }
     }
@@ -231,7 +250,9 @@ public class DBLoader {
     private CSVWriter badFileWriter;
     private String badFilePath;
     private boolean isNeedRebuildTimestampFormat = false;
+    private int timestampFormatCount = 0;
     private boolean isNeedRebuildTimeFormat = false;
+    private int timeFormatCount = 0;
 
     /**
      * Creates a DBLoader with full customization options using DBLoaderConfig.
@@ -396,71 +417,112 @@ public class DBLoader {
     /**
      * Imports CSV data into database with various control options.
      * <p>
-     * This method provides a comprehensive interface for CSV data import with following options.
-     * All option names and string values are case-insensitive.
+     * This method provides a comprehensive interface for CSV data import with options configured via
+     * {@link DBLoaderConfig} constants. All option names and string values are case-insensitive.
      * <p>
      * Options:
-     * - DBLoaderConfig.SHOW: boolean/String, default false. Controls what to display:
-     * - true (boolean) or "true"/"1"/"yes"/"y"/"on" (string, case-insensitive): generates and prints DDL and INSERT statements, then exits
-     * - "all" (case-insensitive): generates and prints DDL and INSERT statements, then exits
-     * - "ddl" (case-insensitive): generates and prints DDL statement only, then exits
-     * - "dml" (case-insensitive): generates and prints INSERT statement only, then exits
-     * - false (boolean) or "false"/"0"/"no"/"n"/"off" (string, case-insensitive) or not present: ignores this option
-     * - DBLoaderConfig.CREATE: boolean/String, default false. When true, generates DDL and creates table.
-     * String values: "true"/"1"/"yes"/"y"/"on" (case-insensitive) for true, "false"/"0"/"no"/"n"/"off" (case-insensitive) for false
-     * - DBLoaderConfig.TRUNCATE: boolean/String, default false. When true, truncates target table.
-     * String values: "true"/"1"/"yes"/"y"/"on" (case-insensitive) for true, "false"/"0"/"no"/"n"/"off" (case-insensitive) for false
-     * - DBLoaderConfig.ERRORS: integer/String, default -1. When set to other value, exits if error count reaches this value.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.BATCH_ROWS: integer/String, default 1024. Specifies batch size for INSERT operations.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.PLATFORM: String, case-insensitive. When specified, uses this database type:
-     * - "auto" or empty string: uses Connection metadata to determine database type (default)
-     * - "oracle": Oracle database
-     * - "mysql" or "mariadb": MySQL/MariaDB database
-     * - "db2": IBM DB2 database
-     * - "mssql" or "sqlserver": Microsoft SQL Server database
-     * - "pgsql" or "postgresql": PostgreSQL database
-     * Otherwise, uses Connection metadata to determine database type
-     * - DBLoaderConfig.ROW_LIMIT: integer/String, default 0. Limits maximum CSV rows to read for data insertion to database (not used for DDL generation). 0 means no limit.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.REPORT_MB: integer/String, default 10. Specifies progress reporting interval in MB.
-     * Set to -1 (number or string) to disable all progress reporting and logging.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.DELIMITER: character/String, default CSVParser.DEFAULT_SEPARATOR. Specifies column delimiter for CSV parsing.
-     * String values: first character is used (case-insensitive)
-     * - DBLoaderConfig.ENCLOSURE: character/String, default CSVParser.DEFAULT_QUOTE_CHARACTER. Specifies enclosure character for CSV parsing.
-     * String values: first character is used (case-insensitive)
-     * - DBLoaderConfig.ESCAPE: character/String, default CSVParser.DEFAULT_DBLoaderConfig.ESCAPE_CHARACTER. Specifies escape character for CSV parsing.
-     * String values: first character is used (case-insensitive)
-     * - DBLoaderConfig.SKIP_ROWS: integer/String, default CSVReader.DEFAULT_SKIP_LINES. Specifies number of lines to skip at start of CSV file.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.ENCODING: String, default auto-detection. Specifies charset for reading the CSV file.
-     * When set to empty string or "auto" (case-insensitive), uses automatic charset detection.
-     * Otherwise, uses the specified charset (e.g., "UTF-8", "GBK", "ISO-8859-1") (case-insensitive)
-     * - DBLoaderConfig.VARIABLE_FORMAT: character/String, default "?". Specifies variable placeholder format for INSERT statement.
-     * - "?" or "jdbc": uses JDBC standard placeholders "?" (default)
-     * - ":" or "oracle": uses Oracle-style placeholders ":1", ":2", ":3", etc.
-     * String values: first character is used (case-insensitive)
+     * - DBLoaderConfig.SHOW: Controls what SQL statements to display and whether to execute them.
+     * Default: "OFF"
+     * Possible values: "TRUE", "1", "YES", "Y", "ON", "ALL", "DDL", "DML", "FALSE", "0", "NO", "N", "OFF"
      * <p>
-     * Note: DBLoaderConfig.DELIMITER, DBLoaderConfig.ENCLOSURE, DBLoaderConfig.ESCAPE, DBLoaderConfig.SKIP_ROWS, DBLoaderConfig.ENCODING, and DBLoaderConfig.VARIABLE_FORMAT options are used for both DDL generation and data import.
+     * - DBLoaderConfig.CREATE: Whether to generate DDL and create table before importing data.
+     * Default: false
+     * Possible values: boolean or string representations like "true", "1", "yes", "y", "on", "false", "0", "no", "n", "off"
      * <p>
-     * Other options from generateCreateTableDDL are also supported:
-     * - DBLoaderConfig.SCAN_ROWS: integer/String, default 200. Number of rows to scan for type detection.
-     * String values are parsed as integer (case-insensitive)
-     * - DBLoaderConfig.COLUMN_SIZE: String, default "MAXIMUM". Column size mode: "ACTUAL" or "MAXIMUM" (case-insensitive)
-     * - DBLoaderConfig.DATE_FORMAT: String, default auto-detection. Date format string for parsing dates.
-     * When set to empty string or "auto" (case-insensitive), uses automatic format detection.
-     * - DBLoaderConfig.TIMESTAMP_FORMAT: String, default auto-detection. Timestamp format string for parsing timestamps.
-     * When set to empty string or "auto" (case-insensitive), uses automatic format detection.
-     * - DBLoaderConfig.TIMESTAMPTZ_FORMAT: String, default auto-detection. Timestamp with timezone format string.
-     * When set to empty string or "auto" (case-insensitive), uses automatic format detection.
-     * - DBLoaderConfig.MAP_COLUMN_NAMES: Map of CSV column names to database column names
+     * - DBLoaderConfig.TRUNCATE: Whether to truncate target table before importing data.
+     * Default: false
+     * Possible values: boolean or string representations like "true", "1", "yes", "y", "on", "false", "0", "no", "n", "off"
+     * <p>
+     * - DBLoaderConfig.ERRORS: Maximum number of errors allowed before stopping import.
+     * Default: -1 (unlimited)
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.BATCH_ROWS: Number of rows to batch before committing.
+     * Default: 2048
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.PLATFORM: Database platform name.
+     * Default: null (auto-detected from connection metadata)
+     * Possible values: "oracle", "mysql", "mariadb", "db2", "mssql", "sqlserver", "pgsql", "postgresql"
+     * <p>
+     * - DBLoaderConfig.ROW_LIMIT: Maximum number of rows to process (0 for no limit).
+     * Default: 0 (unlimited)
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.REPORT_MB: Byte interval for progress logging (in MB).
+     * Default: 10 MB
+     * Set to -1 to disable all progress reporting.
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.DELIMITER: Character to use for separating entries in CSV file.
+     * Default: CSVParser.DEFAULT_SEPARATOR (',')
+     * Possible values: character or string (first character used)
+     * <p>
+     * - DBLoaderConfig.ENCLOSURE: Character to use for quoted elements in CSV file.
+     * Default: CSVParser.DEFAULT_QUOTE_CHARACTER ('"')
+     * Possible values: character or string (first character used)
+     * <p>
+     * - DBLoaderConfig.ESCAPE: Character to use for escaping a separator or quote in CSV file.
+     * Default: CSVParser.DEFAULT_ESCAPE_CHARACTER ('\\')
+     * Possible values: character or string (first character used)
+     * <p>
+     * - DBLoaderConfig.SKIP_ROWS: Number of lines to skip at start of CSV file.
+     * Default: CSVReader.DEFAULT_SKIP_LINES (0)
+     * Note: If hasHeader is true, this is automatically set to 1
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.ENCODING: Charset to use for reading the CSV file.
+     * Default: null (auto-detection)
+     * Use null, empty string, or "auto" for automatic charset detection.
+     * Otherwise, uses the specified charset (e.g., "UTF-8", "GBK", "ISO-8859-1")
+     * <p>
+     * - DBLoaderConfig.VARIABLE_FORMAT: Variable placeholder format for SQL statements.
+     * Default: '?' (JDBC standard)
+     * Possible values: "?" or "jdbc" for JDBC standard, ":" or "oracle" for Oracle-style placeholders
+     * <p>
+     * Note: DELIMITER, ENCLOSURE, ESCAPE, SKIP_ROWS, ENCODING, and VARIABLE_FORMAT options are used for both DDL generation and data import.
+     * <p>
+     * Additional options from generateCreateTableDDL:
+     * - DBLoaderConfig.SCAN_ROWS: Number of rows to scan for type detection during DDL generation.
+     * Default: 200
+     * Possible values: integer or string representation
+     * <p>
+     * - DBLoaderConfig.COLUMN_SIZE: Column size mode for DDL generation.
+     * Default: "MAXIMUM"
+     * Possible values: "ACTUAL" or "MAXIMUM"
+     * <p>
+     * - DBLoaderConfig.DATE_FORMAT: Date format string for parsing date values.
+     * Default: null (auto-detection)
+     * Use null or "auto" for automatic format detection.
+     * <p>
+     * - DBLoaderConfig.TIMESTAMP_FORMAT: Timestamp format string for parsing timestamp values.
+     * Default: null (auto-detection)
+     * Use null or "auto" for automatic format detection.
+     * <p>
+     * - DBLoaderConfig.TIMESTAMPTZ_FORMAT: Timestamp with timezone format string for parsing timestamp with timezone values.
+     * Default: null (auto-detection)
+     * Use null or "auto" for automatic format detection.
+     * <p>
+     * - DBLoaderConfig.MAP_COLUMN_NAMES: Map of CSV column names to database column names.
+     * Default: null (no mapping)
+     * Expected value: Map<String, String>
+     * <p>
+     * - DBLoaderConfig.UNESCAPE_NEWLINE: Whether to unescape newline characters in CSV data (\n to actual newline).
+     * Default: true
+     * Possible values: boolean or string representations
+     * <p>
+     * - DBLoaderConfig.SKIP_COLUMNS: Columns to skip during import.
+     * Default: "auto" (automatic skipping of non-existent columns)
+     * Possible values: "auto", "off", or a list of column names enclosed in parentheses like "(column1,column2)"
+     * <p>
+     * - DBLoaderConfig.COLUMN_INFO_SQL: SQL query to retrieve column information.
+     * Default: null (uses Connection.getMetaData().getColumns() instead)
+     * The query must return COLUMN_NAME, DATA_TYPE, TYPE_NAME, and COLUMN_SIZE columns
      *
      * @param connection  database connection
      * @param tableName   table name (null to use CSV filename without extension)
      * @param csvFilePath path to CSV file
-     * @param options     configuration options (can be null)
+     * @param options     configuration options map (can be null)
      * @return number of rows successfully imported
      * @throws Exception if an error occurs during import
      */
@@ -566,6 +628,8 @@ public class DBLoader {
         } catch (Exception e) {
             config.log("Error during import: " + e.getMessage());
             throw e;
+        } finally {
+            
         }
     }
 
@@ -745,26 +809,26 @@ public class DBLoader {
 
         Locale locale = config.locale;
 
-        CUSTOM_DATETIME_FORMATTER_CACHE.clear();
+        config.dateTimeFormatters.clear();
         int counter = 0;
         if (dateFormat != null && !dateFormat.isEmpty() && !dateFormat.equalsIgnoreCase("auto")) {
-            CUSTOM_DATETIME_FORMATTER_CACHE.put(dateFormat, DateTimeFormatter.ofPattern(dateFormat, locale));
+            config.dateTimeFormatters.put(dateFormat, DateTimeFormatter.ofPattern(dateFormat, locale));
             counter++;
         }
 
         if (timestampFormat != null && !timestampFormat.isEmpty() && !timestampFormat.equalsIgnoreCase("auto")) {
-            CUSTOM_DATETIME_FORMATTER_CACHE.put(timestampFormat, DateTimeFormatter.ofPattern(timestampFormat, locale));
+            config.dateTimeFormatters.put(timestampFormat, DateTimeFormatter.ofPattern(timestampFormat, locale));
             counter++;
         }
 
         if (timestamptzFormat != null && !timestamptzFormat.isEmpty() && !timestamptzFormat.equalsIgnoreCase("auto")) {
-            CUSTOM_DATETIME_FORMATTER_CACHE.put(timestamptzFormat, DateTimeFormatter.ofPattern(timestamptzFormat, locale));
+            config.dateTimeFormatters.put(timestamptzFormat, DateTimeFormatter.ofPattern(timestamptzFormat, locale));
             counter++;
         }
 
         if (counter < 3) {
             DATETIME_FORMATTER_CACHE.forEach((k, v) -> {
-                CUSTOM_DATETIME_FORMATTER_CACHE.put(k, v.withLocale(locale));
+                config.dateTimeFormatters.put(k, v.withLocale(locale));
             });
         }
     }
@@ -815,21 +879,20 @@ public class DBLoader {
             throw new Exception("CSV file is not readable: " + csvFilePath);
         }
 
-        CSVReader csvReader = null;
-        try {
-            // Parse options using DBLoaderConfig.parseOptions method
-            DBLoaderConfig config = DBLoaderConfig.parseOptions(options);
+        // Parse options using DBLoaderConfig.parseOptions method
+        DBLoaderConfig config = DBLoaderConfig.parseOptions(options);
 
-            if (!config.hasHeader) {
-                throw new Exception("CSV file has no header row and no csvHeaders is provided");
-            }
+        if (!config.hasHeader) {
+            throw new Exception("CSV file has no header row and no csvHeaders is provided");
+        }
 
-            char delimiter = config.delimiter;
-            char quotechar = config.quotechar;
-            char escape = config.escape;
-            int skips = config.skipLines;
-            String encoding = config.encoding;
-            csvReader = new CSVReader(csvFilePath, delimiter, quotechar, escape, skips, encoding);
+        char delimiter = config.delimiter;
+        char quotechar = config.quotechar;
+        char escape = config.escape;
+        int skips = config.skipLines;
+        String encoding = config.encoding;
+
+        try (CSVReader csvReader = new CSVReader(csvFilePath, delimiter, quotechar, escape, skips, encoding)) {
             String[] headers = csvReader.readNext();
 
             if (headers == null || headers.length == 0) {
@@ -894,7 +957,7 @@ public class DBLoader {
                 }
 
                 List<String> values = columnValues.get(i);
-                int sqlType = detectColumnType(values, config.unescapeNewline);
+                int sqlType = detectColumnType(values, config.unescapeNewline, config);
 
                 String dbType = getDatabaseTypeName(sqlType, databaseProductName, values, columnSizeMode);
                 ddl.append("    ").append(columnName).append(" ").append(dbType);
@@ -902,13 +965,6 @@ public class DBLoader {
 
             ddl.append("\n)");
             return ddl.toString();
-        } finally {
-            if (csvReader != null) {
-                try {
-                    csvReader.close();
-                } catch (IOException e) {
-                }
-            }
         }
     }
 
@@ -970,7 +1026,7 @@ public class DBLoader {
      * @param values list of sample values for the column
      * @return the SQL type constant from java.sql.Types
      */
-    private static int detectColumnType(List<String> values, boolean unescape) {
+    private static int detectColumnType(List<String> values, boolean unescape, DBLoaderConfig config) {
         if (values == null || values.isEmpty()) {
             return Types.VARCHAR;
         }
@@ -992,7 +1048,7 @@ public class DBLoader {
             }
 
             totalCount++;
-            Integer dateType = isDateTimeValue(value);
+            Integer dateType = isDateTimeValue(value, config);
             if (dateType != null) {
                 if (dateType == Types.DATE) {
                     dateCount++;
@@ -1237,19 +1293,21 @@ public class DBLoader {
      * @param value the string to check
      * @return true if the value is a date/timestamp representation
      */
-    private static Integer isDateTimeValue(String value) {
+    private static Integer isDateTimeValue(String value, DBLoaderConfig config) {
         if (value == null || value.trim().isEmpty()) {
             return null;
         }
 
-        for (DateTimeFormatter formatter : CUSTOM_DATETIME_FORMATTER_CACHE.values()) {
+        for (DateTimeFormatter formatter : config.dateTimeFormatters.values()) {
             try {
                 TemporalAccessor temporal = formatter.parse(value);
                 if (temporal instanceof LocalDate) {
                     return Types.DATE;
                 } else if (temporal.query(TemporalQueries.zone()) != null || temporal.query(TemporalQueries.offset()) != null) {
                     return Types.TIMESTAMP_WITH_TIMEZONE;
-                } else if (!temporal.isSupported(ChronoField.NANO_OF_SECOND) && temporal.get(ChronoField.NANO_OF_SECOND) != 0) {
+                } else if (temporal.isSupported(ChronoField.HOUR_OF_DAY) ||
+                        temporal.isSupported(ChronoField.MINUTE_OF_HOUR) ||
+                        temporal.isSupported(ChronoField.SECOND_OF_MINUTE)) {
                     return Types.TIMESTAMP;
                 } else {
                     return Types.DATE;
@@ -1324,18 +1382,20 @@ public class DBLoader {
         int batchCount = 0;
         boolean autoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
-        if (CUSTOM_DATETIME_FORMATTER_CACHE.isEmpty()) {
+        if (config.dateTimeFormatters.isEmpty()) {
             DATETIME_FORMATTER_CACHE.forEach((k, v) -> {
-                CUSTOM_DATETIME_FORMATTER_CACHE.put(k, v.withLocale(config.locale));
+                config.dateTimeFormatters.put(k, v.withLocale(config.locale));
             });
         }
-        if (CUSTOM_TIME_FORMATTER_CACHE.isEmpty()) {
+        if (config.timeFormatters.isEmpty()) {
             TIME_FORMATTER_CACHE.forEach((k, v) -> {
-                CUSTOM_TIME_FORMATTER_CACHE.put(k, v.withLocale(config.locale));
+                config.timeFormatters.put(k, v.withLocale(config.locale));
             });
         }
-        isNeedRebuildTimestampFormat = CUSTOM_DATETIME_FORMATTER_CACHE.size() > 5;
-        isNeedRebuildTimeFormat = CUSTOM_TIME_FORMATTER_CACHE.size() > 5;
+        isNeedRebuildTimestampFormat = config.dateTimeFormatters.size() > 5;
+        isNeedRebuildTimeFormat = config.timeFormatters.size() > 5;
+        timestampFormatCount = 0;
+        timeFormatCount = 0;
 
         SQLException firstException = null;
         try (CSVReader csvReader = new CSVReader(
@@ -1376,16 +1436,20 @@ public class DBLoader {
                     batchCount++;
                     // Rebuild time/timestamp formatters if needed
                     if (totalRowsProcessed >= 30) {
-                        if (isNeedRebuildTimestampFormat) {
-                            CUSTOM_DATETIME_FORMATTER_CACHE.clear();
-                            CUSTOM_DATETIME_FORMATTER_CACHE.putAll(RUNTIME_DATETIME_FORMATTER_CACHE);
+                        if (isNeedRebuildTimestampFormat && timestampFormatCount >= 100) {
+                            config.dateTimeFormatters.clear();
+                            config.dateTimeFormatters.putAll(config.runtimeDateTimeFormatterCache);
                             isNeedRebuildTimestampFormat = false;
+                            config.runtimeDateTimeFormatterCache.clear();
+                            timestampFormatCount = 0;
                         }
 
-                        if (isNeedRebuildTimeFormat) {
-                            CUSTOM_TIME_FORMATTER_CACHE.clear();
-                            CUSTOM_TIME_FORMATTER_CACHE.putAll(RUNTIME_TIME_FORMATTER_CACHE);
+                        if (isNeedRebuildTimeFormat && timeFormatCount >= 100) {
+                            config.timeFormatters.clear();
+                            config.timeFormatters.putAll(config.runtimeTimeFormatterCache);
                             isNeedRebuildTimeFormat = false;
+                            config.runtimeTimeFormatterCache.clear();
+                            timeFormatCount = 0;
                         }
                     }
 
@@ -1516,8 +1580,14 @@ public class DBLoader {
             switch (sqlType) {
                 case Types.BIGINT:
                     if (isNumeric(value)) {
-                        long longValue = Long.parseLong(value);
-                        pstmt.setLong(paramIndex, longValue);
+                        try {
+                            long longValue = Long.parseLong(value);
+                            pstmt.setLong(paramIndex, longValue);
+                        } catch (NumberFormatException e) {
+                            // Handle extremely large values by using BigDecimal conversion
+                            BigDecimal decimalValue = new BigDecimal(value);
+                            pstmt.setBigDecimal(paramIndex, decimalValue);
+                        }
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1525,11 +1595,15 @@ public class DBLoader {
 
                 case Types.INTEGER:
                     if (isNumeric(value)) {
-                        long longValue = Long.parseLong(value);
-                        if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
-                            throw new SQLException("Value out of INTEGER range: " + value);
+                        try {
+                            long longValue = Long.parseLong(value);
+                            if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
+                                throw new SQLException("Value out of INTEGER range: " + value);
+                            }
+                            pstmt.setInt(paramIndex, (int) longValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid integer value: " + value);
                         }
-                        pstmt.setInt(paramIndex, (int) longValue);
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1537,11 +1611,15 @@ public class DBLoader {
 
                 case Types.SMALLINT:
                     if (isNumeric(value)) {
-                        long longValue = Long.parseLong(value);
-                        if (longValue < Short.MIN_VALUE || longValue > Short.MAX_VALUE) {
-                            throw new SQLException("Value out of SMALLINT range: " + value);
+                        try {
+                            long longValue = Long.parseLong(value);
+                            if (longValue < Short.MIN_VALUE || longValue > Short.MAX_VALUE) {
+                                throw new SQLException("Value out of SMALLINT range: " + value);
+                            }
+                            pstmt.setShort(paramIndex, (short) longValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid smallint value: " + value);
                         }
-                        pstmt.setShort(paramIndex, (short) longValue);
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1549,11 +1627,15 @@ public class DBLoader {
 
                 case Types.TINYINT:
                     if (isNumeric(value)) {
-                        long longValue = Long.parseLong(value);
-                        if (longValue < Byte.MIN_VALUE || longValue > Byte.MAX_VALUE) {
-                            throw new SQLException("Value out of TINYINT range: " + value);
+                        try {
+                            long longValue = Long.parseLong(value);
+                            if (longValue < Byte.MIN_VALUE || longValue > Byte.MAX_VALUE) {
+                                throw new SQLException("Value out of TINYINT range: " + value);
+                            }
+                            pstmt.setByte(paramIndex, (byte) longValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid tinyint value: " + value);
                         }
-                        pstmt.setByte(paramIndex, (byte) longValue);
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1561,9 +1643,14 @@ public class DBLoader {
 
                 case Types.DECIMAL:
                 case Types.NUMERIC:
+                case 96: //BIGINT_UNSIGNED   
                     if (isNumeric(value)) {
-                        BigDecimal decimalValue = new BigDecimal(value);
-                        pstmt.setBigDecimal(paramIndex, decimalValue);
+                        try {
+                            BigDecimal decimalValue = new BigDecimal(value);
+                            pstmt.setBigDecimal(paramIndex, decimalValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid decimal value: " + value);
+                        }
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1571,8 +1658,12 @@ public class DBLoader {
 
                 case Types.DOUBLE:
                     if (isNumeric(value)) {
-                        double doubleValue = Double.parseDouble(value);
-                        pstmt.setDouble(paramIndex, doubleValue);
+                        try {
+                            double doubleValue = Double.parseDouble(value);
+                            pstmt.setDouble(paramIndex, doubleValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid double value: " + value);
+                        }
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1581,8 +1672,12 @@ public class DBLoader {
                 case Types.FLOAT:
                 case Types.REAL:
                     if (isNumeric(value)) {
-                        float floatValue = Float.parseFloat(value);
-                        pstmt.setFloat(paramIndex, floatValue);
+                        try {
+                            float floatValue = Float.parseFloat(value);
+                            pstmt.setFloat(paramIndex, floatValue);
+                        } catch (NumberFormatException e) {
+                            throw new SQLException("Invalid float value: " + value);
+                        }
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1683,14 +1778,16 @@ public class DBLoader {
     }
 
     private void appendTimestampFormatters(String key, DateTimeFormatter formatter) {
-        if (isNeedRebuildTimestampFormat && !RUNTIME_DATETIME_FORMATTER_CACHE.containsKey(key)) {
-            RUNTIME_DATETIME_FORMATTER_CACHE.put(key, formatter);
+        if (isNeedRebuildTimestampFormat && !config.runtimeDateTimeFormatterCache.containsKey(key)) {
+            config.runtimeDateTimeFormatterCache.put(key, formatter);
+            timestampFormatCount++;
         }
     }
 
     private void appendTimeFormatters(String key, DateTimeFormatter formatter) {
-        if (isNeedRebuildTimeFormat && !RUNTIME_TIME_FORMATTER_CACHE.containsKey(key)) {
-            RUNTIME_TIME_FORMATTER_CACHE.put(key, formatter);
+        if (isNeedRebuildTimeFormat && !config.runtimeTimeFormatterCache.containsKey(key)) {
+            config.runtimeTimeFormatterCache.put(key, formatter);
+            timeFormatCount++;
         }
     }
 
@@ -1702,9 +1799,9 @@ public class DBLoader {
      * @return the parsed Instant, or null if parsing fails
      */
     private Instant parseToInstant(String value) {
-        for (String key : CUSTOM_DATETIME_FORMATTER_CACHE.keySet()) {
+        for (String key : config.dateTimeFormatters.keySet()) {
             try {
-                DateTimeFormatter formatter = CUSTOM_DATETIME_FORMATTER_CACHE.get(key);
+                DateTimeFormatter formatter = config.dateTimeFormatters.get(key);
                 TemporalAccessor temporal = formatter.parse(value);
                 appendTimestampFormatters(key, formatter);
                 Instant instant = null;
@@ -1761,9 +1858,9 @@ public class DBLoader {
      * @return the parsed OffsetDateTime, or null if parsing fails
      */
     private OffsetDateTime parseToOffsetDateTime(String value) {
-        for (String key : CUSTOM_DATETIME_FORMATTER_CACHE.keySet()) {
+        for (String key : config.dateTimeFormatters.keySet()) {
             try {
-                DateTimeFormatter formatter = CUSTOM_DATETIME_FORMATTER_CACHE.get(key);
+                DateTimeFormatter formatter = config.dateTimeFormatters.get(key);
                 TemporalAccessor temporal = formatter.parse(value);
                 appendTimestampFormatters(key, formatter);
 
@@ -1832,9 +1929,9 @@ public class DBLoader {
     }
 
     private OffsetTime parseTimeWithTimezone(String value) {
-        for (String key : CUSTOM_TIME_FORMATTER_CACHE.keySet()) {
+        for (String key : config.timeFormatters.keySet()) {
             try {
-                DateTimeFormatter formatter = CUSTOM_TIME_FORMATTER_CACHE.get(key);
+                DateTimeFormatter formatter = config.timeFormatters.get(key);
                 TemporalAccessor temporal = formatter.parse(value);
                 appendTimeFormatters(key, formatter);
                 if (temporal instanceof OffsetTime) {
@@ -1859,9 +1956,9 @@ public class DBLoader {
      * @return the parsed Date, or null if parsing fails
      */
     private java.sql.Time parseTime(String value) {
-        for (String key : CUSTOM_TIME_FORMATTER_CACHE.keySet()) {
+        for (String key : config.timeFormatters.keySet()) {
             try {
-                DateTimeFormatter formatter = CUSTOM_TIME_FORMATTER_CACHE.get(key);
+                DateTimeFormatter formatter = config.timeFormatters.get(key);
                 TemporalAccessor temporal = formatter.parse(value);
                 appendTimeFormatters(key, formatter);
                 if (temporal instanceof OffsetTime) {
@@ -1896,15 +1993,27 @@ public class DBLoader {
         try {
             byte[] result;
             if (value.startsWith("0x") || value.startsWith("0X")) {
-                result = parseHexBinary(value.substring(2));
+                try {
+                    result = parseHexBinary(value.substring(2));
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
             } else if (isHexFormat(value)) {
-                result = parseHexBinary(value);
+                try {
+                    result = parseHexBinary(value);
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
             } else {
-                result = parseBase64Binary(value);
+                try {
+                    result = parseBase64Binary(value);
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
             }
 
             if (result != null && result.length > MAX_BLOB_SIZE) {
-                throw new SQLException("BLOB size exceeds limit: " + result.length + " bytes (max: " + MAX_BLOB_SIZE + " bytes)");
+                return null;
             }
 
             return result;
@@ -1973,13 +2082,46 @@ public class DBLoader {
      * @param row the CSV row
      * @return the approximate byte size
      */
-    private int calculateRowSize(String[] row) {
-        int size = 0;
+    private long calculateRowSize(String[] row) {
+        if (row == null) {
+            return 0;
+        }
+
+        long size = 0;
+
+        // Approximate overhead for CSV row: separator characters and newline
+        // Each field is separated by a delimiter, plus a newline at the end
+        size += row.length - 1 + 2; // 1 byte per delimiter, 2 bytes for CRLF
+
+        // Calculate size for each field
         for (String field : row) {
             if (field != null) {
-                size += field.length() * 2;
+                // For simplicity, assume UTF-8 encoding (1-4 bytes per character)
+                // Use 2 bytes as an average estimate
+                int fieldLength = field.length();
+                size += fieldLength * 2;
+
+                // Add overhead for quotes if field contains special characters
+                if (field.contains(String.valueOf(config.delimiter)) ||
+                        field.contains(String.valueOf(config.quotechar)) ||
+                        field.contains("\n") || field.contains("\r")) {
+                    size += 2; // 2 bytes for quotes
+
+                    // Add overhead for escaped characters
+                    int escapeCount = 0;
+                    for (char c : field.toCharArray()) {
+                        if (c == config.escape || c == config.quotechar) {
+                            escapeCount++;
+                        }
+                    }
+                    size += escapeCount; // 1 byte per escaped character
+                }
+            } else {
+                // For null values, assume minimal storage
+                size += 2; // Minimal overhead for null
             }
         }
+
         return size;
     }
 
