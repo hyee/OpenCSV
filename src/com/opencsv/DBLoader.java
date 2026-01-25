@@ -328,29 +328,72 @@ public class DBLoader {
         if (str.isEmpty()) {
             return null;
         }
+        
+        // Optimized parsing: first check if it's a simple integer or decimal
+        boolean isDecimal = false;
+        boolean hasExponent = false;
+        boolean hasSign = false;
+        
+        // Quick format check
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '.') {
+                if (isDecimal) {
+                    // Multiple decimal points, not a valid number
+                    return null;
+                }
+                isDecimal = true;
+            } else if (c == 'e' || c == 'E') {
+                hasExponent = true;
+                break; // Don't check exponent part further
+            } else if (c == '+' || c == '-') {
+                if (i != 0 && str.charAt(i - 1) != 'e' && str.charAt(i - 1) != 'E') {
+                    // Sign not at beginning or after exponent, invalid
+                    return null;
+                }
+                hasSign = true;
+            } else if (!Character.isDigit(c)) {
+                return null;
+            }
+        }
+        
         try {
-            BigDecimal num = new BigDecimal(str);
-            try {
-                Long longValue = num.longValueExact();
-                if (longValue >= Byte.MIN_VALUE && longValue <= Byte.MAX_VALUE) {
-                    return (Byte) longValue.byteValue();
-                } else if (longValue >= Short.MIN_VALUE && longValue <= Short.MAX_VALUE) {
-                    return (Short) longValue.shortValue();
-                } else if (longValue >= Integer.MIN_VALUE && longValue <= Integer.MAX_VALUE) {
-                    return (Integer) longValue.intValue();
-                } else {
-                    return longValue;
-                }
-            } catch (ArithmeticException e) {
+            // For simple integers without decimal or exponent, use faster parsing
+            if (!isDecimal && !hasExponent) {
+                // Try parsing as primitive long first for performance
+                long longValue;
                 try {
-                    return num.toBigIntegerExact();
-                } catch (ArithmeticException e1) {
-                    double doubleValue = num.doubleValue();
-                    if (BigDecimal.valueOf(doubleValue).compareTo(num) == 0) {
-                        return doubleValue;
+                    longValue = Long.parseLong(str);
+                    // Convert to smallest possible integer type
+                    if (longValue >= Byte.MIN_VALUE && longValue <= Byte.MAX_VALUE) {
+                        return (byte) longValue;
+                    } else if (longValue >= Short.MIN_VALUE && longValue <= Short.MAX_VALUE) {
+                        return (short) longValue;
+                    } else if (longValue >= Integer.MIN_VALUE && longValue <= Integer.MAX_VALUE) {
+                        return (int) longValue;
+                    } else {
+                        return longValue;
                     }
-                    return num;
+                } catch (NumberFormatException e) {
+                    // If too large for long, try BigInteger
+                    return new BigInteger(str);
                 }
+            }
+            
+            // For decimals or numbers with exponent, use BigDecimal for accuracy
+            BigDecimal num = new BigDecimal(str);
+            
+            // Try to convert to smaller types if possible
+            try {
+                return num.toBigIntegerExact();
+            } catch (ArithmeticException e) {
+                // Has decimal part, try double if no precision loss
+                double doubleValue = num.doubleValue();
+                if (Double.isFinite(doubleValue)&&BigDecimal.valueOf(doubleValue).compareTo(num) == 0) {
+                    return doubleValue;
+                }
+                // If double can't represent accurately, return BigDecimal
+                return num;
             }
         } catch (NumberFormatException e) {
             return null;
@@ -1405,7 +1448,7 @@ public class DBLoader {
             if (config.hasHeader && config.csvHeaders != null) {
                 badWriter.writeNext(config.csvHeaders);
             }
-            ArrayList<String[]> batchRows = new ArrayList<>();
+            String[][] batchRows = new String[config.batchSize][];
             String[] row;
             while ((row = csvReader.readNext()) != null) {
                 ++rowIndex;
@@ -1423,7 +1466,7 @@ public class DBLoader {
                         paramIndex++;
                     }
                     pstmt.addBatch();
-                    batchRows.add(row);
+                    batchRows[batchCount] = row;
                     batchCount++;
                     // Rebuild time/timestamp formatters if needed
                     if (totalRowsProcessed >= 30) {
@@ -1450,11 +1493,12 @@ public class DBLoader {
                         } catch (BatchUpdateException e) {
                             handleBatchUpdateException(e, batchRows, batchCount);
                         }
-                        batchRows.clear();
+
                         connection.commit();
                         pstmt.clearBatch();
                         batchCount = 0;
                         logProgress();
+                        Arrays.fill(batchRows, null);
                     }
                 } catch (SQLException e) {
                     handleError(e.getMessage());
@@ -1514,16 +1558,16 @@ public class DBLoader {
      * @param batchRows current rows being processed
      * @param batchSize batch size
      */
-    private void handleBatchUpdateException(BatchUpdateException e, List<String[]> batchRows, int batchSize) {
+    private void handleBatchUpdateException(BatchUpdateException e, String[][] batchRows, int batchSize) {
         final int[] updateCounts = e.getUpdateCounts();
         String error = e.getMessage().trim();
         writeBadRow(null, error);
         int failedRows = 0;
         final int doneRows = updateCounts.length;
-        for (int i = 0; i < batchRows.size(); i++) {
+        for (int i = 0; i < batchSize; i++) {
             if (i >= doneRows || updateCounts[i] == Statement.EXECUTE_FAILED) {
                 handleError("Batch update failed at position " + (i + 1));
-                writeBadRow(batchRows.get(i), null);
+                writeBadRow(batchRows[i], null);
                 failedRows++;
             }
         }
@@ -1574,7 +1618,7 @@ public class DBLoader {
                     if (num instanceof BigInteger) {
                         pstmt.setBigDecimal(paramIndex, new BigDecimal((BigInteger) num));
                     } else if (num != null && !(num instanceof Double || num instanceof Float || num instanceof BigDecimal)) {
-                        pstmt.setLong(paramIndex, num instanceof Long ? (Long) num : num.intValue());
+                        pstmt.setLong(paramIndex, num instanceof Long ? (Long) num : num.longValue());
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1583,7 +1627,7 @@ public class DBLoader {
                 case Types.INTEGER:
                     num = parseNumeric(value);
                     if (num instanceof Integer || num instanceof Short || num instanceof Byte) {
-                        pstmt.setInt(paramIndex, num instanceof Integer ? (Integer) num : num.shortValue());
+                        pstmt.setInt(paramIndex, num instanceof Integer ? (Integer) num : num.intValue());
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
@@ -1601,12 +1645,11 @@ public class DBLoader {
                 case Types.TINYINT:
                     num = parseNumeric(value);
                     if (num instanceof Byte) {
-                        pstmt.setByte(paramIndex, num.byteValue());
+                        pstmt.setByte(paramIndex, (Byte)num);
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
                     break;
-
                 case Types.DECIMAL:
                 case Types.NUMERIC:
                 case 96: //BIGINT_UNSIGNED   
@@ -1617,7 +1660,6 @@ public class DBLoader {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
                     break;
-
                 case Types.DOUBLE:
                     num = parseNumeric(value);
                     if (num instanceof BigInteger) {
@@ -1632,6 +1674,7 @@ public class DBLoader {
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
+                    break;
                 case Types.FLOAT:
                 case Types.REAL:
                     num = parseNumeric(value);
@@ -1647,6 +1690,7 @@ public class DBLoader {
                     } else {
                         throw new SQLException("Invalid numeric value: " + value);
                     }
+                    break;
                 case Types.DATE:
                     Date date = parseDate(value);
                     if (date != null) {
@@ -1655,7 +1699,6 @@ public class DBLoader {
                         throw new SQLException("Invalid date format: " + value);
                     }
                     break;
-
                 case Types.TIME:
                     java.sql.Time time = parseTime(value);
                     if (time != null) {
