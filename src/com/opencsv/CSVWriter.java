@@ -194,7 +194,8 @@ public class CSVWriter implements Closeable {
                 logWriter.write(msg.getBytes());
             }
             logWriter.flush();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+        }
     }
 
     /**
@@ -384,7 +385,7 @@ public class CSVWriter implements Closeable {
      */
     public void close() throws IOException {
         flush(true);
-        if(!logWriter.equals(System.out)&&!logWriter.equals(System.err)) {
+        if (logWriter != null && !logWriter.equals(System.out) && !logWriter.equals(System.err)) {
             logWriter.close();
         }
         buffer.close();
