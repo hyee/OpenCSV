@@ -103,6 +103,11 @@ public class DBLoaderConfig {
     public static final String ERRORS = "ERRORS";
 
     /**
+     * Configuration option for bad file path.
+     */
+    public static final String BAD_FILE = "BAD_FILE";
+
+    /**
      * Configuration option for batch size.
      */
     public static final String BATCH_ROWS = "BATCH_ROWS";
@@ -297,6 +302,11 @@ public class DBLoaderConfig {
      */
     public int errors;
     /**
+     * Path to bad file for storing rows with errors.
+     * Default: auto (same to the input CSV file path with suffix ".bad")
+     */
+    public String badFile;
+    /**
      * Locale name to use for date and timestamp parsing.
      * Default: empty string (system default locale)
      */
@@ -388,7 +398,7 @@ public class DBLoaderConfig {
         this.columnNameMap = null;
         this.scanRows = 200;
         this.columnSize = COLUMN_SIZE_MAXIMUM;
-        this.locale = Locale.getDefault();
+        this.locale = null;
         this.localeName = "";
         this.dateFormat = null;
         this.timestampFormat = null;
@@ -397,6 +407,7 @@ public class DBLoaderConfig {
         this.create = false;
         this.truncate = false;
         this.errors = -1;
+        this.badFile = "auto";
         this.platform = null;
         this.variableFormat = '?';
         this.skipColumns.put(SKIP_COLUMNS_AUTO, "true");
@@ -539,6 +550,10 @@ public class DBLoaderConfig {
             Integer errorsOption = getOptionIntFromMap(options, ERRORS, null);
             if (errorsOption != null) {
                 config.errors = errorsOption;
+            }
+            String badFileOption = getOptionStringFromMap(options, BAD_FILE, null);
+            if (badFileOption != null && !badFileOption.isEmpty() && !badFileOption.equalsIgnoreCase("auto")) {
+                config.badFile = badFileOption;
             }
             // PLATFORM - used for database platform (oracle, mysql, db2, mssql, pgsql)
             String platformOption = getOptionStringFromMap(options, PLATFORM, null);
@@ -684,6 +699,7 @@ public class DBLoaderConfig {
         }
         try {
             logger.write((message + "\n").getBytes());
+            logger.flush();
         } catch (Exception e) {
             throw new RuntimeException("Failed to write log message", e);
         }

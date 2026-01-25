@@ -1,6 +1,7 @@
 package com.opencsv;
 
 import java.io.File;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
@@ -320,7 +321,13 @@ public class DBLoader {
      * @param str the string to check
      * @return the parsed numeric value, or null if not valid
      */
+    private static final BigInteger MAX_EXACT_DOUBLE_INTEGER = BigInteger.valueOf(1L << 53); // 2^53
+
     private static Number parseNumeric(String str) {
+        return parseNumeric(str, Number.class);
+    }
+
+    private static Number parseNumeric(String str, Class<?> clz) {
         if (str == null || str.isEmpty()) {
             return null;
         }
@@ -328,76 +335,87 @@ public class DBLoader {
         if (str.isEmpty()) {
             return null;
         }
-        
-        // Optimized parsing: first check if it's a simple integer or decimal
-        boolean isDecimal = false;
-        boolean hasExponent = false;
-        boolean hasSign = false;
-        
-        // Quick format check
-        for (int i = 0; i < str.length(); i++) {
-            char c = str.charAt(i);
-            if (c == '.') {
-                if (isDecimal) {
-                    // Multiple decimal points, not a valid number
-                    return null;
+        final boolean numberClass = clz.equals(Number.class);
+        final boolean doubleClass = clz.equals(Float.class) || clz.equals(Double.class) || clz.equals(BigDecimal.class);
+        if (!doubleClass && !str.contains(".") && !str.contains("e") && !str.contains("E")) {
+            try {
+                if (clz.equals(BigInteger.class)) {
+                    return new BigInteger(str);
                 }
-                isDecimal = true;
-            } else if (c == 'e' || c == 'E') {
-                hasExponent = true;
-                break; // Don't check exponent part further
-            } else if (c == '+' || c == '-') {
-                if (i != 0 && str.charAt(i - 1) != 'e' && str.charAt(i - 1) != 'E') {
-                    // Sign not at beginning or after exponent, invalid
-                    return null;
+                final long value = Long.parseLong(str);
+                if (clz.equals(Long.class)) {
+                    return value;
                 }
-                hasSign = true;
-            } else if (!Character.isDigit(c)) {
+                if ((numberClass || clz.equals(Byte.class)) && value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+                    return (byte) value;
+                } else if ((numberClass || clz.equals(Short.class)) && value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
+                    return (short) value;
+                } else if ((numberClass || clz.equals(Integer.class)) && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+                    return (int) value;
+                } else {
+                    return value; // Long
+                }
+            } catch (Throwable e) {
+                try {
+                    if (numberClass) {
+                        return new BigInteger(str);
+                    }
+                } catch (Throwable ex) {
+                }
+            }
+        }
+
+        BigDecimal bd = null;
+        try {
+            bd = new BigDecimal(str);
+            if (clz.equals(BigDecimal.class)) {
+                return bd;
+            }
+        } catch (Throwable e) {
+            return null;
+        }
+
+        if (!doubleClass) {
+            try {
+                if (clz.equals(BigInteger.class)) {
+                    return bd.toBigIntegerExact();
+                }
+                final long value = bd.longValueExact();
+                if (clz.equals(Long.class)) {
+                    return value;
+                }
+                if ((numberClass || clz.equals(Byte.class)) && value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+                    return (byte) value;
+                } else if ((numberClass || clz.equals(Short.class)) && value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
+                    return (short) value;
+                } else if ((numberClass || clz.equals(Integer.class)) && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+                    return (int) value;
+                } else {
+                    return value; // Long
+                }
+            } catch (Throwable e) {
+
+            }
+            if (!numberClass) {
                 return null;
             }
         }
-        
-        try {
-            // For simple integers without decimal or exponent, use faster parsing
-            if (!isDecimal && !hasExponent) {
-                // Try parsing as primitive long first for performance
-                long longValue;
-                try {
-                    longValue = Long.parseLong(str);
-                    // Convert to smallest possible integer type
-                    if (longValue >= Byte.MIN_VALUE && longValue <= Byte.MAX_VALUE) {
-                        return (byte) longValue;
-                    } else if (longValue >= Short.MIN_VALUE && longValue <= Short.MAX_VALUE) {
-                        return (short) longValue;
-                    } else if (longValue >= Integer.MIN_VALUE && longValue <= Integer.MAX_VALUE) {
-                        return (int) longValue;
-                    } else {
-                        return longValue;
-                    }
-                } catch (NumberFormatException e) {
-                    // If too large for long, try BigInteger
-                    return new BigInteger(str);
-                }
+
+        if (numberClass || clz.equals(Double.class) || clz.equals(Float.class)) {
+            final double d = bd.doubleValue();
+            if (bd.scale() <= 0 && bd.unscaledValue().abs().compareTo(MAX_EXACT_DOUBLE_INTEGER) <= 0) {
+                return clz.equals(Float.class) ? (float) d : d;
             }
-            
-            // For decimals or numbers with exponent, use BigDecimal for accuracy
-            BigDecimal num = new BigDecimal(str);
-            
-            // Try to convert to smaller types if possible
-            try {
-                return num.toBigIntegerExact();
-            } catch (ArithmeticException e) {
-                // Has decimal part, try double if no precision loss
-                double doubleValue = num.doubleValue();
-                if (Double.isFinite(doubleValue)&&BigDecimal.valueOf(doubleValue).compareTo(num) == 0) {
-                    return doubleValue;
-                }
-                // If double can't represent accurately, return BigDecimal
-                return num;
+
+            if (!Double.isFinite(d) && bd.compareTo(new BigDecimal(Double.toString(d))) == 0) {
+                return clz.equals(Float.class) ? (float) d : d;
             }
-        } catch (NumberFormatException e) {
-            return null;
+
+            if (clz.equals(Double.class) || clz.equals(Float.class)) {
+                return null;
+            }
         }
+        return bd;
     }
 
     /**
@@ -848,24 +866,21 @@ public class DBLoader {
 
         config.dateTimeFormatters.clear();
         int counter = 0;
-        if (dateFormat != null && !dateFormat.isEmpty() && !dateFormat.equalsIgnoreCase("auto")) {
-            config.dateTimeFormatters.put(dateFormat, DateTimeFormatter.ofPattern(dateFormat, locale));
-            counter++;
-        }
-
-        if (timestampFormat != null && !timestampFormat.isEmpty() && !timestampFormat.equalsIgnoreCase("auto")) {
-            config.dateTimeFormatters.put(timestampFormat, DateTimeFormatter.ofPattern(timestampFormat, locale));
-            counter++;
-        }
-
-        if (timestamptzFormat != null && !timestamptzFormat.isEmpty() && !timestamptzFormat.equalsIgnoreCase("auto")) {
-            config.dateTimeFormatters.put(timestamptzFormat, DateTimeFormatter.ofPattern(timestamptzFormat, locale));
-            counter++;
+        String[] format = new String[]{dateFormat, timestampFormat, timestamptzFormat};
+        for (String fmt : format) {
+            if (fmt != null && !fmt.isEmpty() && !fmt.equalsIgnoreCase("auto")) {
+                if (locale == null) {
+                    config.dateTimeFormatters.put(fmt, DateTimeFormatter.ofPattern(fmt));
+                } else {
+                    config.dateTimeFormatters.put(fmt, DateTimeFormatter.ofPattern(fmt, locale));
+                }
+                counter++;
+            }
         }
 
         if (counter < 3) {
             DATETIME_FORMATTER_CACHE.forEach((k, v) -> {
-                config.dateTimeFormatters.put(k, v.withLocale(locale));
+                config.dateTimeFormatters.put(k, locale == null ? v : v.withLocale(locale));
             });
         }
     }
@@ -1406,24 +1421,21 @@ public class DBLoader {
             throw new SQLException("Connection is null or closed");
         }
         String insertSQL = generateInsertStatementWithConfig(connection, tableName, csvFilePath, config);
+        badFileWriter = null;
+        badFilePath = null;
 
-        // Initialize .bad file
-        badFilePath = csvFilePath + ".bad";
-        File badFile = new File(badFilePath);
-        if (badFile.exists()) {
-            badFile.delete();
-        }
         int batchCount = 0;
         boolean autoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
+        final Locale locale = config.locale;
         if (config.dateTimeFormatters.isEmpty()) {
             DATETIME_FORMATTER_CACHE.forEach((k, v) -> {
-                config.dateTimeFormatters.put(k, v.withLocale(config.locale));
+                config.dateTimeFormatters.put(k, locale == null ? v : v.withLocale(locale));
             });
         }
         if (config.timeFormatters.isEmpty()) {
             TIME_FORMATTER_CACHE.forEach((k, v) -> {
-                config.timeFormatters.put(k, v.withLocale(config.locale));
+                config.timeFormatters.put(k, locale == null ? v : v.withLocale(locale));
             });
         }
         isNeedRebuildTimestampFormat = config.dateTimeFormatters.size() > 5;
@@ -1439,15 +1451,11 @@ public class DBLoader {
                 config.escape,
                 config.skipLines + (config.hasHeader ? 1 : 0),
                 config.encoding);
-             PreparedStatement pstmt = connection.prepareStatement(insertSQL);
-             CSVWriter badWriter = new CSVWriter(badFilePath)) {
+             PreparedStatement pstmt = connection.prepareStatement(insertSQL)) {
 
-            badFileWriter = badWriter; // Store reference for writeBadRow method
             int rowIndex = 0;
             long startProgressTime = System.currentTimeMillis();
-            if (config.hasHeader && config.csvHeaders != null) {
-                badWriter.writeNext(config.csvHeaders);
-            }
+
             String[][] batchRows = new String[config.batchSize][];
             String[] row;
             while ((row = csvReader.readNext()) != null) {
@@ -1493,17 +1501,17 @@ public class DBLoader {
                         } catch (BatchUpdateException e) {
                             handleBatchUpdateException(e, batchRows, batchCount);
                         }
-
                         connection.commit();
                         pstmt.clearBatch();
                         batchCount = 0;
                         logProgress();
                         Arrays.fill(batchRows, null);
                     }
-                } catch (SQLException e) {
-                    handleError(e.getMessage());
-                    writeBadRow(row, e.getMessage());
-                    config.log("Error processing row " + (rowIndex + config.skipLines) + ": " + e.getMessage());
+                } catch (Throwable e) {
+                    final String err = "Error processing row #" + (rowIndex + 1 + config.skipLines) + ": " + e.getMessage();
+                    handleError(err);
+                    writeBadRow(row, err);
+                    config.log(err);
                 }
             }
 
@@ -1529,7 +1537,7 @@ public class DBLoader {
                     ((totalRowsProcessed - totalErrors) * 1000.0) / (System.currentTimeMillis() - startProgressTime));
             config.log(message);
             return totalRowsProcessed;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             firstException = e instanceof SQLException ? (SQLException) e : new SQLException(e.getMessage(), e);
             throw e;
         } finally {
@@ -1542,8 +1550,13 @@ public class DBLoader {
                 config.log("Error restoring auto-commit: " + e.getMessage());
             }
 
-            // Clear the badFileWriter reference
-            badFileWriter = null;
+            if (badFileWriter != null) {
+                try {
+                    badFileWriter.close();
+                } catch (IOException e) {
+                }
+                badFileWriter = null;
+            }
 
             if (firstException != null) {
                 throw firstException;
@@ -1558,7 +1571,7 @@ public class DBLoader {
      * @param batchRows current rows being processed
      * @param batchSize batch size
      */
-    private void handleBatchUpdateException(BatchUpdateException e, String[][] batchRows, int batchSize) {
+    private void handleBatchUpdateException(BatchUpdateException e, String[][] batchRows, int batchSize) throws IOException {
         final int[] updateCounts = e.getUpdateCounts();
         String error = e.getMessage().trim();
         writeBadRow(null, error);
@@ -1586,7 +1599,7 @@ public class DBLoader {
      * @param value      CSV string value
      * @throws SQLException if conversion fails or value is invalid
      */
-    private void setPreparedStatementParameter(PreparedStatement pstmt, int paramIndex, int sqlType, String value) throws SQLException {
+    private void setPreparedStatementParameter(PreparedStatement pstmt, int paramIndex, int sqlType, String value) throws Exception {
         if (value == null || value.isEmpty()) {
             pstmt.setNull(paramIndex, sqlType);
             return;
@@ -1611,177 +1624,157 @@ public class DBLoader {
             }
         }
         Number num;
-        try {
-            switch (sqlType) {
-                case Types.BIGINT:
-                    num = parseNumeric(value);
-                    if (num instanceof BigInteger) {
-                        pstmt.setBigDecimal(paramIndex, new BigDecimal((BigInteger) num));
-                    } else if (num != null && !(num instanceof Double || num instanceof Float || num instanceof BigDecimal)) {
-                        pstmt.setLong(paramIndex, num instanceof Long ? (Long) num : num.longValue());
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
+        switch (sqlType) {
+            case Types.BIGINT:
+                num = parseNumeric(value, BigInteger.class);
+                if (num != null) {
+                    pstmt.setBigDecimal(paramIndex, new BigDecimal((BigInteger) num));
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
 
-                case Types.INTEGER:
-                    num = parseNumeric(value);
-                    if (num instanceof Integer || num instanceof Short || num instanceof Byte) {
-                        pstmt.setInt(paramIndex, num instanceof Integer ? (Integer) num : num.intValue());
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
+            case Types.INTEGER:
+                num = parseNumeric(value, Integer.class);
+                if (num != null) {
+                    pstmt.setInt(paramIndex, (Integer) num);
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
 
-                case Types.SMALLINT:
-                    num = parseNumeric(value);
-                    if (num instanceof Short || num instanceof Byte) {
-                        pstmt.setShort(paramIndex, num instanceof Short ? (Short) num : num.shortValue());
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
+            case Types.SMALLINT:
+                num = parseNumeric(value, Short.class);
+                if (num != null) {
+                    pstmt.setShort(paramIndex, (Short) num);
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
 
-                case Types.TINYINT:
-                    num = parseNumeric(value);
-                    if (num instanceof Byte) {
-                        pstmt.setByte(paramIndex, (Byte)num);
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
-                case Types.DECIMAL:
-                case Types.NUMERIC:
-                case 96: //BIGINT_UNSIGNED   
-                    num = parseNumeric(value);
-                    if (num != null) {
-                        pstmt.setBigDecimal(paramIndex, num instanceof BigDecimal ? (BigDecimal) num : new BigDecimal(value));
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
-                case Types.DOUBLE:
-                    num = parseNumeric(value);
-                    if (num instanceof BigInteger) {
-                        double doubleValue = ((BigInteger) num).doubleValue();
-                        if (((BigInteger) num).compareTo(BigInteger.valueOf((long) doubleValue)) == 0) {
-                            pstmt.setDouble(paramIndex, doubleValue);
-                        } else {
-                            throw new SQLException("Invalid numeric value: " + value);
-                        }
-                    } else if (num != null && !(num instanceof BigDecimal)) {
-                        pstmt.setDouble(paramIndex, num instanceof Double ? (Double) num : num.doubleValue());
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
-                case Types.FLOAT:
-                case Types.REAL:
-                    num = parseNumeric(value);
-                    if (num instanceof BigInteger) {
-                        float floatValue = ((BigInteger) num).floatValue();
-                        if (((BigInteger) num).compareTo(BigInteger.valueOf((long) floatValue)) == 0) {
-                            pstmt.setFloat(paramIndex, floatValue);
-                        } else {
-                            throw new SQLException("Invalid numeric value: " + value);
-                        }
-                    } else if (num != null && !(num instanceof BigDecimal)) {
-                        pstmt.setFloat(paramIndex, num instanceof Float ? (Float) num : num.floatValue());
-                    } else {
-                        throw new SQLException("Invalid numeric value: " + value);
-                    }
-                    break;
-                case Types.DATE:
-                    Date date = parseDate(value);
-                    if (date != null) {
-                        pstmt.setDate(paramIndex, new java.sql.Date(date.getTime()));
-                    } else {
-                        throw new SQLException("Invalid date format: " + value);
-                    }
-                    break;
-                case Types.TIME:
-                    java.sql.Time time = parseTime(value);
-                    if (time != null) {
-                        pstmt.setTime(paramIndex, time);
-                    } else {
-                        throw new SQLException("Unable to parse time value: " + value);
-                    }
-                    break;
-                case Types.TIME_WITH_TIMEZONE:
-                    OffsetTime offsetTime = parseTimeWithTimezone(value);
-                    if (offsetTime != null) {
-                        pstmt.setObject(paramIndex, offsetTime);
-                    } else {
-                        throw new SQLException("Unable to parse time with timezone value: " + value);
-                    }
-                    break;
+            case Types.TINYINT:
+                num = parseNumeric(value, Byte.class);
+                if (num != null) {
+                    pstmt.setByte(paramIndex, (Byte) num);
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
+            case Types.DECIMAL:
+            case Types.NUMERIC:
+            case 96: //BIGINT_UNSIGNED   
+                num = parseNumeric(value, BigDecimal.class);
+                if (num != null) {
+                    pstmt.setBigDecimal(paramIndex, num instanceof BigDecimal ? (BigDecimal) num : new BigDecimal(value));
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
+            case Types.DOUBLE:
+                num = parseNumeric(value, Double.class);
+                if (num != null) {
+                    pstmt.setDouble(paramIndex, (Double) num);
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
+            case Types.FLOAT:
+            case Types.REAL:
+                num = parseNumeric(value, Float.class);
+                if (num != null) {
+                    pstmt.setFloat(paramIndex, (Float) num);
+                } else {
+                    throw new SQLException("Invalid numeric value: " + value);
+                }
+                break;
+            case Types.DATE:
+                Date date = parseDate(value);
+                if (date != null) {
+                    pstmt.setDate(paramIndex, new java.sql.Date(date.getTime()));
+                } else {
+                    throw new SQLException("Invalid date format: " + value);
+                }
+                break;
+            case Types.TIME:
+                java.sql.Time time = parseTime(value);
+                if (time != null) {
+                    pstmt.setTime(paramIndex, time);
+                } else {
+                    throw new SQLException("Unable to parse time value: " + value);
+                }
+                break;
+            case Types.TIME_WITH_TIMEZONE:
+                OffsetTime offsetTime = parseTimeWithTimezone(value);
+                if (offsetTime != null) {
+                    pstmt.setObject(paramIndex, offsetTime);
+                } else {
+                    throw new SQLException("Unable to parse time with timezone value: " + value);
+                }
+                break;
 
-                case Types.TIMESTAMP:
-                case -100: // Oracle TIMESTAMPNS
-                    Timestamp timestamp = parseTimestamp(value);
-                    if (timestamp != null) {
-                        pstmt.setTimestamp(paramIndex, timestamp);
-                    } else {
-                        throw new SQLException("Unable to parse timestamp value: " + value);
-                    }
-                    break;
+            case Types.TIMESTAMP:
+            case -100: // Oracle TIMESTAMPNS
+                Timestamp timestamp = parseTimestamp(value);
+                if (timestamp != null) {
+                    pstmt.setTimestamp(paramIndex, timestamp);
+                } else {
+                    throw new SQLException("Unable to parse timestamp value: " + value);
+                }
+                break;
 
-                case Types.TIMESTAMP_WITH_TIMEZONE:
-                case -101: // Oracle TIMESTAMPTZ
-                case -102: // Oracle TIMESTAMPLTZ
-                    OffsetDateTime offsetDateTime = parseTimestampWithTimezone(value);
-                    if (offsetDateTime != null) {
-                        pstmt.setObject(paramIndex, offsetDateTime);
-                    } else {
-                        throw new SQLException("Unable to parse timestamp with timezone value: " + value);
-                    }
-                    break;
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+            case -101: // Oracle TIMESTAMPTZ
+            case -102: // Oracle TIMESTAMPLTZ
+                OffsetDateTime offsetDateTime = parseTimestampWithTimezone(value);
+                if (offsetDateTime != null) {
+                    pstmt.setObject(paramIndex, offsetDateTime);
+                } else {
+                    throw new SQLException("Unable to parse timestamp with timezone value: " + value);
+                }
+                break;
 
-                case Types.BOOLEAN:
-                case Types.BIT:
-                case 252: // Oracle BOOLEAN
-                    boolean boolValue = parseBoolean(value);
-                    pstmt.setBoolean(paramIndex, boolValue);
-                    break;
+            case Types.BOOLEAN:
+            case Types.BIT:
+            case 252: // Oracle BOOLEAN
+                boolean boolValue = parseBoolean(value);
+                pstmt.setBoolean(paramIndex, boolValue);
+                break;
 
-                case Types.BINARY:
-                case Types.VARBINARY:
-                case Types.LONGVARBINARY:
-                case Types.BLOB:
-                    value = unescapeNewline(value, config.unescapeNewline);
-                    byte[] bytes = parseBinary(value);
-                    if (bytes != null) {
-                        pstmt.setBytes(paramIndex, bytes);
-                    } else {
-                        throw new SQLException("Invalid binary data: " + value);
-                    }
-                    break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+            case Types.LONGVARBINARY:
+            case Types.BLOB:
+                value = unescapeNewline(value, config.unescapeNewline);
+                byte[] bytes = parseBinary(value);
+                if (bytes != null) {
+                    pstmt.setBytes(paramIndex, bytes);
+                } else {
+                    throw new SQLException("Invalid binary data: " + value);
+                }
+                break;
 
-                case Types.CHAR:
-                case Types.VARCHAR:
-                case Types.LONGVARCHAR:
-                case Types.NCHAR:
-                case Types.NVARCHAR:
-                case Types.LONGNVARCHAR:
-                case Types.CLOB:
-                case Types.NCLOB:
-                case Types.SQLXML:
-                case 2016: // Oracle JSON
-                case -105: // Oracle VECTOR
-                case -106: // Oracle VECTOR_INT8
-                case -107: // Oracle VECTOR_FLOAT32
-                case -108: // Oracle VECTOR_FLOAT64
-                case -109: // Oracle VECTOR_BINARY
-                    value = unescapeNewline(value, config.unescapeNewline);
-                    pstmt.setString(paramIndex, value);
-                    break;
+            case Types.CHAR:
+            case Types.VARCHAR:
+            case Types.LONGVARCHAR:
+            case Types.NCHAR:
+            case Types.NVARCHAR:
+            case Types.LONGNVARCHAR:
+            case Types.CLOB:
+            case Types.NCLOB:
+            case Types.SQLXML:
+            case 2016: // Oracle JSON
+            case -105: // Oracle VECTOR
+            case -106: // Oracle VECTOR_INT8
+            case -107: // Oracle VECTOR_FLOAT32
+            case -108: // Oracle VECTOR_FLOAT64
+            case -109: // Oracle VECTOR_BINARY
+                value = unescapeNewline(value, config.unescapeNewline);
+                pstmt.setString(paramIndex, value);
+                break;
 
-                default:
-                    pstmt.setString(paramIndex, value);
-                    break;
-            }
-        } catch (NumberFormatException e) {
-            throw new SQLException("Number format error: " + e.getMessage());
+            default:
+                pstmt.setString(paramIndex, value);
+                break;
         }
     }
 
@@ -2071,8 +2064,42 @@ public class DBLoader {
      * @param row          the failed CSV row
      * @param errorMessage the error message
      */
-    private void writeBadRow(String[] row, String errorMessage) {
+
+    private void writeBadRow(String[] row, String errorMessage) throws IOException {
+        final String bad = config.badFile != null && !config.badFile.isEmpty() && !config.badFile.equals("auto") ? config.badFile : null;
+
+        if (badFileWriter == null && badFilePath == null) {
+            if (bad == null) {
+                // Initialize .bad file
+                badFilePath = csvFilePath + ".bad";
+            } else {
+                badFilePath = bad;
+            }
+            try {
+                File badFile = new File(badFilePath);
+                if (badFile.exists()) {
+                    badFile.delete();
+                }
+                badFileWriter = new CSVWriter(badFilePath);
+                if (config.hasHeader && config.csvHeaders != null) {
+                    badFileWriter.writeNext(config.csvHeaders);
+                }
+            } catch (Exception e) {
+                try {
+                    badFileWriter.close();
+                } catch (IOException ex) {
+                } finally {
+                    badFileWriter = null;
+                }
+                if (bad != null) {
+                    throw new IOException("Error initializing .bad file: " + e.getMessage());
+                }
+            }
+        }
         try {
+            if (badFileWriter == null) {
+                return;
+            }
             if (errorMessage != null) {
                 String error = errorMessage.trim();
                 final int pos = error.indexOf("\n");
@@ -2083,7 +2110,11 @@ public class DBLoader {
                 badFileWriter.writeNext(row);
             }
         } catch (Exception e) {
-            config.log("Error writing to bad file: " + e.getMessage());
+            if (bad != null) {
+                config.log("Error writing to bad file " + bad + ": " + e.getMessage());
+            } else {
+                badFileWriter = null;
+            }
         }
     }
 
