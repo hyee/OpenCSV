@@ -23,7 +23,10 @@ import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -55,6 +58,13 @@ public class CSVReader implements Closeable, Iterable<String[]> {
     private boolean closed;
     private long linesRead = 0;
     private long recordsRead = 0;
+    private String encoding;
+    private Charset charset;
+    private String currentLine;
+    private int currentLineIndex = 0;
+    private String csvHeader;
+    private String[] fileList;
+    private int currentFileIndex = 0;
 
     /**
      * Constructs CSVReader using a comma for the separator.
@@ -73,11 +83,13 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @throws IllegalArgumentException if filePath is null
      */
     public CSVReader(String filePath) throws IOException {
-        this(createReaderWithCharset(filePath, null), CSVParser.DEFAULT_SEPARATOR, CSVParser.DEFAULT_QUOTE_CHARACTER, CSVParser.DEFAULT_ESCAPE_CHARACTER);
+        this(createReaderForFirstFile(filePath), CSVParser.DEFAULT_SEPARATOR, CSVParser.DEFAULT_QUOTE_CHARACTER, CSVParser.DEFAULT_ESCAPE_CHARACTER);
+        this.fileList = FileReader.getFiles(filePath);
+        this.encoding = detectCharset(fileList[0], null);
     }
 
     /**
-     * Constructs CSVReader from a file path with automatic charset detection and custom separator.
+     * Constructs CSVReader from a file path with specified parameters.
      *
      * @param filePath  the path to the CSV file
      * @param separator the delimiter to use for separating entries
@@ -89,11 +101,13 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @throws IllegalArgumentException if filePath is null
      */
     public CSVReader(String filePath, char separator, char quotechar, char escape, String encoding) throws IOException {
-        this(createReaderWithCharset(filePath, encoding), DEFAULT_SKIP_LINES, new CSVParser(separator, quotechar, escape));
+        this(createReaderForFirstFile(filePath, encoding), DEFAULT_SKIP_LINES, new CSVParser(separator, quotechar, escape));
+        this.fileList = FileReader.getFiles(filePath);
+        this.encoding = detectCharset(fileList[0], null);
     }
 
     /**
-     * Constructs CSVReader from a file path with automatic charset detection and custom separator.
+     * Constructs CSVReader from a file path with specified parameters.
      *
      * @param filePath  the path to the CSV file
      * @param separator the delimiter to use for separating entries
@@ -106,8 +120,36 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @throws IllegalArgumentException if filePath is null
      */
     public CSVReader(String filePath, char separator, char quotechar, char escape, int line, String encoding) throws IOException {
-        this(createReaderWithCharset(filePath, encoding), line, new CSVParser(separator, quotechar, escape));
+        this(createReaderForFirstFile(filePath, encoding), line, new CSVParser(separator, quotechar, escape));
+        this.fileList = FileReader.getFiles(filePath);
+        this.encoding = detectCharset(fileList[0], null);
     }
+
+    /**
+     * Creates a Reader for the first file in the given file path, handling compressed files.
+     *
+     * @param filePath the path to the file
+     * @return a Reader for the first file
+     * @throws IOException if the file cannot be read
+     */
+    private static Reader createReaderForFirstFile(String filePath) throws IOException {
+        return createReaderForFirstFile(filePath, null);
+    }
+
+    /**
+     * Creates a Reader for the first file in the given file path, handling compressed files.
+     *
+     * @param filePath the path to the file
+     * @param encoding the charset to use for reading the file
+     * @return a Reader for the first file
+     * @throws IOException if the file cannot be read
+     */
+    private static Reader createReaderForFirstFile(String filePath, String encoding) throws IOException {
+        String[] files = FileReader.getFiles(filePath);
+        String firstFile = files[0];
+        return createReaderWithCharset(firstFile, encoding);
+    }
+
 
     /**
      * Constructs CSVReader with supplied separator.
@@ -248,6 +290,21 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      * @throws IllegalArgumentException if reader or csvParser is null
      */
     CSVReader(Reader reader, int line, CSVParser csvParser, boolean keepCR, boolean verifyReader) {
+        this(reader, line, csvParser, keepCR, verifyReader, null);
+    }
+
+    /**
+     * Constructs CSVReader with supplied CSVParser and encoding.
+     *
+     * @param reader       the reader to an underlying CSV source.
+     * @param line         the line number to skip for start reading
+     * @param csvParser    the parser to use to parse input
+     * @param keepCR       true to keep carriage returns in data read, false otherwise
+     * @param verifyReader true to verify reader before each read, false otherwise
+     * @param encoding     the encoding used for reading the file
+     * @throws IllegalArgumentException if reader or csvParser is null
+     */
+    CSVReader(Reader reader, int line, CSVParser csvParser, boolean keepCR, boolean verifyReader, String encoding) {
         if (reader == null) {
             throw new IllegalArgumentException("Reader cannot be null");
         }
@@ -261,32 +318,51 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         this.keepCR = keepCR;
         this.separator = csvParser.getSeparator();
         this.verifyReader = verifyReader;
+        this.encoding = encoding;
     }
 
     /**
-     * Creates a Reader with automatic charset detection from a file path.
+     * Detects the charset to use for a file.
      *
      * @param filePath the path to the CSV file
      * @param encoding the charset to use for reading the file
      *                 (null/empty/"auto" for auto-detection)
-     * @return a Reader with detected or specified charset
-     * @throws IOException              if the file cannot be read
-     * @throws IllegalArgumentException if filePath is null
+     * @return the actual charset to use
+     * @throws IllegalArgumentException if filePath is null or charset is unsupported
      */
-    private static Reader createReaderWithCharset(String filePath, String encoding) throws IOException {
+    private static String detectCharset(String filePath, String encoding) {
         if (filePath == null) {
             throw new IllegalArgumentException("File path cannot be null");
         }
         String charset = encoding;
         if (charset == null || charset.trim().isEmpty() || "auto".equalsIgnoreCase(charset.trim())) {
-            charset = CharsetDetector.detectCharset(filePath);
-            System.out.println("    Detected file encoding: " + charset);
+            try {
+                charset = CharsetDetector.detectCharset(filePath);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to detect charset", e);
+            }
         } else {
             if (!java.nio.charset.Charset.isSupported(charset)) {
                 throw new IllegalArgumentException("Unsupported charset: " + charset);
             }
         }
-        return new java.io.InputStreamReader(new java.io.FileInputStream(filePath), charset);
+        return charset;
+    }
+
+    /**
+     * Creates a Reader with the specified charset from a file path.
+     *
+     * @param filePath the path to the CSV file
+     * @param charset  the charset to use for reading the file
+     * @return a Reader with the specified charset
+     * @throws IOException              if the file cannot be read
+     * @throws IllegalArgumentException if filePath is null
+     */
+    private static Reader createReaderWithCharset(String filePath, String charset) throws IOException {
+        if (filePath == null) {
+            throw new IllegalArgumentException("File path cannot be null");
+        }
+        return FileReader.createReader(filePath, charset);
     }
 
     /**
@@ -313,6 +389,16 @@ public class CSVReader implements Closeable, Iterable<String[]> {
      */
     public boolean keepCarriageReturns() {
         return keepCR;
+    }
+
+    /**
+     * Returns the encoding used by this CSVReader.
+     *
+     * @return the encoding used, or null if the reader was created with a Reader instance
+     * that doesn't provide encoding information
+     */
+    public String getEncoding() {
+        return encoding;
     }
 
     /**
@@ -371,7 +457,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
                     if (!hasNext) {
                         return validateResult(result);
                     }
-                } while (nextLine == null || nextLine.trim().isEmpty());
+                } while (nextLine.trim().isEmpty());
                 String[] r = parser.parseLineMulti(nextLine);
                 if (r.length > 0) {
                     if (result == null) {
@@ -423,19 +509,102 @@ public class CSVReader implements Closeable, Iterable<String[]> {
 
         if (!this.linesSkipped) {
             for (int i = 0; i < skipLines; i++) {
-                lineReader.readLine();
+                String skippedLine = lineReader.readLine();
                 linesRead++;
+                currentLineIndex++;
+                // Save the header if skipLines > 0 and this is the last skipped line
+                if (i == skipLines - 1) {
+                    skippedLine = skippedLine.trim().replaceAll("\\s*,\\s*", ",");
+                    if(currentFileIndex == 0) {
+                        csvHeader = skippedLine;
+                    } else if(!skippedLine.equalsIgnoreCase(csvHeader)) {
+                        throw new IOException("Header mismatch between files. Expected: " + csvHeader + ", Got: " + skippedLine);
+                    }
+                }
             }
             this.linesSkipped = true;
         }
+
         String nextLine = lineReader.readLine();
+        currentLine = nextLine;
+
         if (nextLine == null) {
-            hasNext = false;
+            // Check if there are more files to read
+            if (fileList != null && currentFileIndex < fileList.length -1) {
+                // Move to next file
+                currentFileIndex++;
+                String nextFile = fileList[currentFileIndex];
+
+                // Close current reader
+                closeCurrentReader();
+
+                // Create new reader for next file
+                Reader reader = createReaderWithCharset(nextFile, encoding);
+                this.br = (reader instanceof BufferedReader ? (BufferedReader) reader : new BufferedReader(reader));
+                this.lineReader = new LineReader(br, keepCR);
+
+                // Reset flags
+                this.linesSkipped = false;
+                this.hasNext = true;
+                this.closed = false;
+                currentLineIndex = 0;
+                // Read first line from new file
+                return getNextLine();
+            } else {
+                // No more files
+                hasNext = false;
+            }
         } else {
             linesRead++;
+            currentLineIndex++;
         }
 
         return hasNext ? nextLine : null;
+    }
+
+    /**
+     * Closes the current reader without setting the closed flag.
+     * This is used when switching between files in a multi-file scenario.
+     *
+     * @throws IOException if an I/O error occurs
+     */
+    private void closeCurrentReader() throws IOException {
+        if (br != null) {
+            br.close();
+            br = null;
+            lineReader = null;
+        }
+    }
+
+    /**
+     * Returns the number of bytes in the current line.
+     *
+     * @return the number of bytes in the current line
+     */
+    public int getLineBytes() {
+        if (charset == null) {
+            charset = encoding == null || encoding.isEmpty() ? StandardCharsets.UTF_8 : Charset.forName(encoding);
+        }
+        return currentLine == null || currentLine.isEmpty() ? 0 : currentLine.getBytes(charset).length;
+    }
+
+    /**
+     * Returns the current line being read.
+     *
+     * @return the current line being read
+     */
+    public String getCurrentLine() {
+        return currentLine;
+    }
+
+
+    /**
+     * Returns the current line index of the current file being read.
+     *
+     * @return the current line index of the current file being read
+     */
+    public long getCurrentLineIndex() {
+        return currentLineIndex;
     }
 
     /**
@@ -454,7 +623,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
             br.mark(READ_AHEAD_LIMIT);
             int nextByte = br.read();
             br.reset();
-            if (nextByte == -1) {
+            if (nextByte == -1 && fileList != null && currentFileIndex == fileList.length -1) {
                 closed = true;
                 return true;
             }
@@ -474,9 +643,7 @@ public class CSVReader implements Closeable, Iterable<String[]> {
         if (!closed) {
             IOException exception = null;
             try {
-                if (br != null) {
-                    br.close();
-                }
+                closeCurrentReader();
             } catch (IOException e) {
                 exception = e;
             } finally {

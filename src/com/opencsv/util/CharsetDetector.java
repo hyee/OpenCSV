@@ -1,30 +1,50 @@
 package com.opencsv.util;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import com.opencsv.FileReader;
+import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipEntry;
 
 public class CharsetDetector {
     private static final int BUFFER_SIZE = 8192;
-    private static final Charset[] COMMON_CHARSETS = {
-            StandardCharsets.UTF_8,
-            Charset.forName("GBK"),
-            Charset.forName("GB18030"),
-            Charset.forName("BIG5"),
-            Charset.forName("BIG5-HKSCS"),
-            StandardCharsets.ISO_8859_1,
-            Charset.forName("ISO-8859-15"),
-            Charset.forName("Windows-1252"),
-            Charset.forName("Shift_JIS"),
-            Charset.forName("EUC-JP"),
-            Charset.forName("Windows-1251"),
-            Charset.forName("KOI8-R"),
-            Charset.forName("ISO-8859-5"),
-            StandardCharsets.US_ASCII
-    };
+    private static final Charset[] COMMON_CHARSETS = initializeCharsets();
+
+    private static Charset[] initializeCharsets() {
+        List<Charset> charsets = new ArrayList<>();
+        charsets.add(StandardCharsets.UTF_8);
+        addCharsetIfSupported(charsets, "GBK");
+        addCharsetIfSupported(charsets, "GB18030");
+        addCharsetIfSupported(charsets, "BIG5");
+        addCharsetIfSupported(charsets, "BIG5-HKSCS");
+        charsets.add(StandardCharsets.ISO_8859_1);
+        addCharsetIfSupported(charsets, "ISO-8859-15");
+        addCharsetIfSupported(charsets, "Windows-1252");
+        addCharsetIfSupported(charsets, "Shift_JIS");
+        addCharsetIfSupported(charsets, "EUC-JP");
+        addCharsetIfSupported(charsets, "Windows-1251");
+        addCharsetIfSupported(charsets, "KOI8-R");
+        addCharsetIfSupported(charsets, "ISO-8859-5");
+        charsets.add(StandardCharsets.US_ASCII);
+        addCharsetIfSupported(charsets, "UTF-16LE");
+        addCharsetIfSupported(charsets, "UTF-16BE");
+        addCharsetIfSupported(charsets, "UTF-32LE");
+        addCharsetIfSupported(charsets, "UTF-32BE");
+        return charsets.toArray(new Charset[0]);
+    }
+
+    private static void addCharsetIfSupported(List<Charset> charsets, String charsetName) {
+        try {
+            charsets.add(Charset.forName(charsetName));
+        } catch (Exception e) {
+            // Ignore unsupported charset
+        }
+    }
 
     private static final int CJK_START = 0x4E00;
     private static final int CJK_END = 0x9FFF;
@@ -39,17 +59,32 @@ public class CharsetDetector {
     private static final int CYRILLIC_START = 0x0400;
     private static final int CYRILLIC_END = 0x04FF;
 
-    private static final int LATIN_EXTENDED_A_START = 0x00C0;
-    private static final int LATIN_EXTENDED_A_END = 0x00FF;
-    private static final int LATIN_EXTENDED_B_START = 0x0100;
-    private static final int LATIN_EXTENDED_B_END = 0x017F;
+    // Latin-1 Supplement: contains common accented Latin characters (à, é, ñ, etc.)
+    private static final int LATIN_1_SUPPLEMENT_START = 0x0080;
+    private static final int LATIN_1_SUPPLEMENT_END = 0x00FF;
+    // Latin Extended-A: additional European Latin characters
+    private static final int LATIN_EXTENDED_A_START = 0x0100;
+    private static final int LATIN_EXTENDED_A_END = 0x017F;
+    // Latin Extended-B: additional phonetic and African Latin characters
+    private static final int LATIN_EXTENDED_B_START = 0x0180;
+    private static final int LATIN_EXTENDED_B_END = 0x024F;
 
     public static String detectCharset(File file) throws IOException {
         return detectCharset(file, null);
     }
 
     public static String detectCharset(String filePath) throws IOException {
-        return detectCharset(new File(filePath), null);
+        // Check if it's a file inside a compressed file
+        if (FileReader.isZipEntry(filePath)) {
+            // Handle zip entry
+            return detectCharsetFromCompressedFile(filePath, null);
+        } else if (FileReader.isCompressedFile(filePath)) {
+            // Handle compressed file
+            return detectCharsetFromCompressedFile(filePath, null);
+        } else {
+            // Handle regular file
+            return detectCharset(new File(filePath), null);
+        }
     }
 
     public static String detectCharset(File file, String defaultCharset) throws IOException {
@@ -57,13 +92,51 @@ public class CharsetDetector {
 
         String charsetFromBOM = getCharsetFromBOM(buffer);
         if (charsetFromBOM != null) {
-            return charsetFromBOM;
+            // If charset detected from BOM is valid, return it directly
+            if (isValidCharset(charsetFromBOM)) {
+                return charsetFromBOM;
+            }
         }
 
         return detectCharsetFromBytes(buffer, defaultCharset);
     }
 
+    /**
+     * Detect charset from compressed file
+     * @param filePath file path
+     * @param defaultCharset default charset
+     * @return detected charset
+     * @throws IOException if file does not exist or is not readable
+     */
+    private static String detectCharsetFromCompressedFile(String filePath, String defaultCharset) throws IOException {
+        byte[] buffer = readFileSampleFromCompressedFile(filePath);
+
+        String charsetFromBOM = getCharsetFromBOM(buffer);
+        if (charsetFromBOM != null) {
+            // If charset detected from BOM is valid, return it directly
+            if (isValidCharset(charsetFromBOM)) {
+                return charsetFromBOM;
+            }
+        }
+
+        return detectCharsetFromBytes(buffer, defaultCharset);
+    }
+
+    private static boolean isValidCharset(String charsetName) {
+        try {
+            if (charsetName == null) return false;
+            Charset.forName(charsetName);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static byte[] readFileSample(File file) throws IOException {
+        if (!file.exists() || !file.canRead()) {
+            throw new IOException("File does not exist or is not readable: " + file.getAbsolutePath());
+        }
+
         try (FileInputStream fis = new FileInputStream(file)) {
             byte[] buffer = new byte[BUFFER_SIZE];
             int bytesRead = fis.read(buffer);
@@ -74,9 +147,78 @@ public class CharsetDetector {
         }
     }
 
+    /**
+     * Read sample data from compressed file
+     * @param filePath file path
+     * @return sample data
+     * @throws IOException if file does not exist or is not readable
+     */
+    private static byte[] readFileSampleFromCompressedFile(String filePath) throws IOException {
+        if (FileReader.isZipEntry(filePath)) {
+            // Handle zip entry
+            String zipFilePath = FileReader.getZipFilePath(filePath);
+            String entryName = FileReader.getZipEntryName(filePath);
+
+            // Check if zip file exists and is readable
+            File zipFile = new File(zipFilePath);
+            if (!zipFile.exists() || !zipFile.canRead()) {
+                throw new IOException("Zip file does not exist or is not readable: " + zipFilePath);
+            }
+
+            try (FileInputStream fis = new FileInputStream(zipFile);
+                 ZipInputStream zis = new ZipInputStream(fis)) {
+
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    if (entry.getName().equals(entryName)) {
+                        byte[] buffer = new byte[BUFFER_SIZE];
+                        int bytesRead = zis.read(buffer);
+                        if (bytesRead < 0) {
+                            return new byte[0];
+                        }
+                        zis.closeEntry();
+                        return Arrays.copyOf(buffer, bytesRead);
+                    }
+                    zis.closeEntry();
+                }
+
+                throw new IOException("Entry not found in zip file: " + entryName);
+            }
+        } else if (filePath.toLowerCase().endsWith(".gz")) {
+            // Handle gz file
+            File gzFile = new File(filePath);
+            if (!gzFile.exists() || !gzFile.canRead()) {
+                throw new IOException("GZ file does not exist or is not readable: " + filePath);
+            }
+
+            try (FileInputStream fis = new FileInputStream(gzFile);
+                 GZIPInputStream gzis = new GZIPInputStream(fis)) {
+
+                byte[] buffer = new byte[BUFFER_SIZE];
+                int bytesRead = gzis.read(buffer);
+                if (bytesRead < 0) {
+                    return new byte[0];
+                }
+                return Arrays.copyOf(buffer, bytesRead);
+            }
+        } else {
+            // Handle regular file
+            return readFileSample(new File(filePath));
+        }
+    }
+
     private static String getCharsetFromBOM(byte[] bytes) {
-        if (bytes.length >= 3 && bytes[0] == (byte) 0xEF && bytes[1] == (byte) 0xBB && bytes[2] == (byte) 0xBF) {
-            return StandardCharsets.UTF_8.name();
+        // Note: Must detect UTF-32 first, because UTF-32 BOM contains UTF-16 BOM prefix
+        if (bytes.length >= 4 && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xFE && bytes[2] == (byte) 0x00 && bytes[3] == (byte) 0x00) {
+            return "UTF-32LE"; // UTF-32 Little Endian BOM
+        } else if (bytes.length >= 4 && bytes[0] == (byte) 0x00 && bytes[1] == (byte) 0x00 && bytes[2] == (byte) 0xFE && bytes[3] == (byte) 0xFF) {
+            return "UTF-32BE"; // UTF-32 Big Endian BOM
+        } else if (bytes.length >= 3 && bytes[0] == (byte) 0xEF && bytes[1] == (byte) 0xBB && bytes[2] == (byte) 0xBF) {
+            return StandardCharsets.UTF_8.name(); // UTF-8 BOM
+        } else if (bytes.length >= 2 && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xFE) {
+            return "UTF-16LE"; // UTF-16 Little Endian BOM
+        } else if (bytes.length >= 2 && bytes[0] == (byte) 0xFE && bytes[1] == (byte) 0xFF) {
+            return "UTF-16BE"; // UTF-16 Big Endian BOM
         }
         return null;
     }
@@ -181,7 +323,7 @@ public class CharsetDetector {
                 }
             }
 
-            if (cjkChars > 0 && charset.equals(StandardCharsets.UTF_8)) {
+            if (cjkChars > 0 && charset.name().equals(StandardCharsets.UTF_8.name())) {
                 score += cjkChars;
             }
 
@@ -191,7 +333,7 @@ public class CharsetDetector {
                 score += cjkChars * 2;
             }
 
-            if ((hiraganaChars > 0 || katakanaChars > 0) && charset.equals(StandardCharsets.UTF_8)) {
+            if ((hiraganaChars > 0 || katakanaChars > 0) && charset.name().equals(StandardCharsets.UTF_8.name())) {
                 score += (hiraganaChars + katakanaChars);
                 score += cjkChars;
             }
@@ -201,37 +343,38 @@ public class CharsetDetector {
                 score += cyrillicChars * 2;
             }
 
-            if (cyrillicChars > 0 && charset.equals(StandardCharsets.UTF_8)) {
+            if (cyrillicChars > 0 && charset.name().equals(StandardCharsets.UTF_8.name())) {
                 score += cyrillicChars;
             }
 
             if (latinExtendedChars > 0 &&
-                    (charset.equals(StandardCharsets.ISO_8859_1) || charset.name().equals("ISO-8859-15") || charset.name().equals("Windows-1252"))) {
+                    (charset.name().equals(StandardCharsets.ISO_8859_1.name()) || charset.name().equals("ISO-8859-15") || charset.name().equals("Windows-1252"))) {
                 score += latinExtendedChars;
             }
 
-            if (latinExtendedChars > 0 && charset.equals(StandardCharsets.UTF_8)) {
-                score += latinExtendedChars / 2;
+            if (latinExtendedChars > 0 && charset.name().equals(StandardCharsets.UTF_8.name())) {
+                // Use floating-point calculation and rounding to avoid precision loss
+                score += (int) Math.round(latinExtendedChars / 2.0);
             }
 
             if (cyrillicChars > 0 &&
-                    (charset.equals(StandardCharsets.ISO_8859_1) ||
-                            charset.equals(StandardCharsets.US_ASCII) ||
+                    (charset.name().equals(StandardCharsets.ISO_8859_1.name()) ||
+                            charset.name().equals(StandardCharsets.US_ASCII.name()) ||
                             charset.name().equals("Windows-1252") ||
                             charset.name().equals("ISO-8859-15"))) {
                 score -= cyrillicChars * 5;
             }
 
-            if (cjkChars > 0 && (charset.equals(StandardCharsets.ISO_8859_1) ||
-                    charset.equals(StandardCharsets.US_ASCII) ||
+            if (cjkChars > 0 && (charset.name().equals(StandardCharsets.ISO_8859_1.name()) ||
+                    charset.name().equals(StandardCharsets.US_ASCII.name()) ||
                     charset.name().equals("Windows-1252") ||
                     charset.name().equals("ISO-8859-15"))) {
                 score -= cjkChars * 5;
             }
 
             if ((hiraganaChars > 0 || katakanaChars > 0) &&
-                    (charset.equals(StandardCharsets.ISO_8859_1) ||
-                            charset.equals(StandardCharsets.US_ASCII) ||
+                    (charset.name().equals(StandardCharsets.ISO_8859_1.name()) ||
+                            charset.name().equals(StandardCharsets.US_ASCII.name()) ||
                             charset.name().equals("Windows-1252") ||
                             charset.name().equals("ISO-8859-15") ||
                             charset.name().equals("GBK") ||
@@ -241,15 +384,14 @@ public class CharsetDetector {
                 score -= (hiraganaChars + katakanaChars) * 5;
             }
 
+            // Cyrillic characters should not appear in Chinese and Japanese encodings
             if (cyrillicChars > 0 &&
-                    (charset.equals(StandardCharsets.ISO_8859_1) ||
-                            charset.equals(StandardCharsets.US_ASCII) ||
-                            charset.name().equals("Windows-1252") ||
-                            charset.name().equals("ISO-8859-15") ||
-                            charset.name().equals("GBK") ||
+                    (charset.name().equals("GBK") ||
                             charset.name().equals("GB18030") ||
                             charset.name().equals("BIG5") ||
-                            charset.name().equals("BIG5-HKSCS"))) {
+                            charset.name().equals("BIG5-HKSCS") ||
+                            charset.name().equals("Shift_JIS") ||
+                            charset.name().equals("EUC-JP"))) {
                 score -= cyrillicChars * 5;
             }
 
@@ -281,7 +423,8 @@ public class CharsetDetector {
     }
 
     private static boolean isLatinExtended(char c) {
-        return (c >= LATIN_EXTENDED_A_START && c <= LATIN_EXTENDED_A_END) ||
+        return (c >= LATIN_1_SUPPLEMENT_START && c <= LATIN_1_SUPPLEMENT_END) ||
+                (c >= LATIN_EXTENDED_A_START && c <= LATIN_EXTENDED_A_END) ||
                 (c >= LATIN_EXTENDED_B_START && c <= LATIN_EXTENDED_B_END);
     }
 

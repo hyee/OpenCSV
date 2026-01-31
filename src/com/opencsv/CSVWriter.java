@@ -60,7 +60,7 @@ public class CSVWriter implements Closeable {
     protected FileBuffer buffer;
     protected boolean asyncMode = false;
     protected HashMap<String, Boolean> excludes = new HashMap<>();
-    protected HashMap<String, String> remaps = new HashMap();
+    protected HashMap<String, String> remaps = new HashMap<>();
     protected String[] titles;
 
     /**

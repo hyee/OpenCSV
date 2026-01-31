@@ -22,7 +22,7 @@ import java.util.Map;
  * <p>
  * All configuration options support case-insensitive string values where applicable.
  */
-public class DBLoaderConfig {
+public class UserConfig {
     // Configuration option constants
     /**
      * Configuration option for the number of rows to scan for type detection.
@@ -123,6 +123,11 @@ public class DBLoaderConfig {
     public static final String ROW_LIMIT = "ROW_LIMIT";
 
     /**
+     * Configuration option for strict number conversion to avoid overflow,such as number with decimal digits cannot cast to integer
+     */
+    public static final String STRICT_MODE = "STRICT_MODE";
+
+    /**
      * Configuration option for delimiter character.
      */
     public static final String DELIMITER = "DELIMITER";
@@ -210,6 +215,12 @@ public class DBLoaderConfig {
      * Default: 0 (unlimited)
      */
     public int rowLimit;
+
+    /**
+     * Strict number conversion to avoid overflow,such as number with decimal digits cannot cast to integer
+     * Default: false
+     */
+    public boolean strictMode;
     /**
      * Character to use for separating entries in CSV file.
      * Default: CSVParser.DEFAULT_SEPARATOR (',')
@@ -385,7 +396,7 @@ public class DBLoaderConfig {
     /**
      * Default constructor with default values.
      */
-    public DBLoaderConfig() {
+    public UserConfig() {
         this.hasHeader = true;
         this.batchSize = 2048;
         this.progressIntervalBytes = 10 * 1024 * 1024;
@@ -413,6 +424,7 @@ public class DBLoaderConfig {
         this.skipColumns.put(SKIP_COLUMNS_AUTO, "true");
         this.unescapeNewline = true;
         this.logger = System.out;
+        this.strictMode = true;
     }
 
     /**
@@ -425,60 +437,62 @@ public class DBLoaderConfig {
      * @param options configuration options map
      * @return DBLoaderConfig instance with settings from options
      */
-    public static DBLoaderConfig parseOptions(Map<String, Object> options) {
-        DBLoaderConfig config = new DBLoaderConfig();
+    public static UserConfig parseOptions(Map<String, Object> options) {
+        UserConfig config = new UserConfig();
 
         if (options != null) {
+            final Map<String, Object> upperOptions = new HashMap<>();
+            options.forEach((k, v) -> upperOptions.put(k.toUpperCase(), v));
             // Parse hasHeader option - true if CSV file has a header row
-            Boolean hasHeaderOption = getOptionBooleanFromMap(options, HAS_HEADER, null);
+            Boolean hasHeaderOption = getOptionBooleanFromMap(upperOptions, HAS_HEADER, null);
             if (hasHeaderOption != null) {
                 config.hasHeader = hasHeaderOption;
             }
 
             // Parse batch size option - number of rows to batch before committing
-            Integer batchSizeOption = getOptionIntFromMap(options, BATCH_ROWS, null);
+            Integer batchSizeOption = getOptionIntFromMap(upperOptions, BATCH_ROWS, null);
             if (batchSizeOption != null) {
                 config.batchSize = batchSizeOption;
             }
 
             // Parse row limit option - maximum number of rows to process
-            Integer rowLimitOption = getOptionIntFromMap(options, ROW_LIMIT, null);
+            Integer rowLimitOption = getOptionIntFromMap(upperOptions, ROW_LIMIT, null);
             if (rowLimitOption != null) {
                 config.rowLimit = rowLimitOption;
             }
 
             // Parse progress interval option - byte interval for progress logging
-            Integer reportMbOption = getOptionIntFromMap(options, REPORT_MB, null);
+            Integer reportMbOption = getOptionIntFromMap(upperOptions, REPORT_MB, null);
             if (reportMbOption != null) {
                 config.progressIntervalBytes = (long) reportMbOption * 1024 * 1024;
             }
 
             // Parse delimiter option - column delimiter for CSV parsing
-            Character delimiterOption = getOptionCharFromMap(options, DELIMITER, null);
+            Character delimiterOption = getOptionCharFromMap(upperOptions, DELIMITER, null);
             if (delimiterOption != null) {
                 config.delimiter = delimiterOption;
             }
 
             // Parse quote character option - enclosure character for CSV parsing
-            Character quotecharOption = getOptionCharFromMap(options, ENCLOSURE, null);
+            Character quotecharOption = getOptionCharFromMap(upperOptions, ENCLOSURE, null);
             if (quotecharOption != null) {
                 config.quotechar = quotecharOption;
             }
 
             // Parse escape character option - escape character for CSV parsing
-            Character escapeOption = getOptionCharFromMap(options, ESCAPE, null);
+            Character escapeOption = getOptionCharFromMap(upperOptions, ESCAPE, null);
             if (escapeOption != null) {
                 config.escape = escapeOption;
             }
 
             // Parse unescape newline option - true if newline characters should be unescaped
-            Boolean unescapeNewlineOption = getOptionBooleanFromMap(options, UNESCAPE_NEWLINE, null);
+            Boolean unescapeNewlineOption = getOptionBooleanFromMap(upperOptions, UNESCAPE_NEWLINE, null);
             if (unescapeNewlineOption != null) {
                 config.unescapeNewline = unescapeNewlineOption;
             }
 
             // Parse skip lines option - number of lines to skip at start of CSV file
-            Integer skipLinesOption = getOptionIntFromMap(options, SKIP_ROWS, null);
+            Integer skipLinesOption = getOptionIntFromMap(upperOptions, SKIP_ROWS, null);
 
             if (skipLinesOption != null) {
                 config.skipLines = skipLinesOption;
@@ -487,93 +501,98 @@ public class DBLoaderConfig {
             }
 
             // Parse encoding option - charset to use for reading CSV file
-            String encodingOption = getOptionStringFromMap(options, ENCODING, null);
+            String encodingOption = getOptionStringFromMap(upperOptions, ENCODING, null);
             if (encodingOption != null && !encodingOption.isEmpty() && !encodingOption.equalsIgnoreCase("auto")) {
                 config.encoding = encodingOption;
             }
 
             // Parse column name mapping option - map of CSV column names to database column names
-            Map<String, String> columnNameMapOption = getOptionMapFromMap(options, MAP_COLUMN_NAMES, null);
+            Map<String, String> columnNameMapOption = getOptionMapFromMap(upperOptions, MAP_COLUMN_NAMES, null);
             if (columnNameMapOption != null) {
                 config.columnNameMap = columnNameMapOption;
             }
 
             // Parse additional options and store them in DBLoaderConfig
             // SCAN_ROWS - used for type detection
-            Integer scanRowsOption = getOptionIntFromMap(options, SCAN_ROWS, null);
+            Integer scanRowsOption = getOptionIntFromMap(upperOptions, SCAN_ROWS, null);
             if (scanRowsOption != null) {
                 config.scanRows = scanRowsOption;
             }
             // COLUMN_SIZE - used for column size mode (ACTUAL or MAXIMUM)
-            String columnSizeOption = getOptionStringFromMap(options, COLUMN_SIZE, null);
+            String columnSizeOption = getOptionStringFromMap(upperOptions, COLUMN_SIZE, null);
             if (columnSizeOption != null) {
                 config.columnSize = columnSizeOption;
             }
 
             // LOCALE - used for locale to use for date and timestamp parsing
-            String localeOption = getOptionStringFromMap(options, LOCALE, null);
+            String localeOption = getOptionStringFromMap(upperOptions, LOCALE, null);
             if (localeOption != null) {
                 config.localeName = localeOption;
                 config.locale = localeOption != null && !localeOption.isEmpty() && !localeOption.equalsIgnoreCase("auto") ? Locale.forLanguageTag(localeOption) : Locale.getDefault();
             }
             // DATE_FORMAT - used for date parsing
-            String dateFormatOption = getOptionStringFromMap(options, DATE_FORMAT, null);
+            String dateFormatOption = getOptionStringFromMap(upperOptions, DATE_FORMAT, null);
             if (dateFormatOption != null) {
                 config.dateFormat = dateFormatOption;
             }
             // TIMESTAMP_FORMAT - used for timestamp parsing
-            String timestampFormatOption = getOptionStringFromMap(options, TIMESTAMP_FORMAT, null);
+            String timestampFormatOption = getOptionStringFromMap(upperOptions, TIMESTAMP_FORMAT, null);
             if (timestampFormatOption != null) {
                 config.timestampFormat = timestampFormatOption;
             }
             // TIMESTAMPTZ_FORMAT - used for timestamp with timezone parsing
-            String timestamptzFormatOption = getOptionStringFromMap(options, TIMESTAMPTZ_FORMAT, null);
+            String timestamptzFormatOption = getOptionStringFromMap(upperOptions, TIMESTAMPTZ_FORMAT, null);
             if (timestamptzFormatOption != null) {
                 config.timestamptzFormat = timestamptzFormatOption;
             }
             // SHOW - used for controlling display (DDL, DML, ALL)
-            String showOption = getOptionStringFromMap(options, SHOW, null);
+            String showOption = getOptionStringFromMap(upperOptions, SHOW, null);
             if (showOption != null) {
                 config.show = showOption;
             }
             // CREATE - used for generating DDL and creating table
-            Boolean createOption = getOptionBooleanFromMap(options, CREATE, null);
+            Boolean createOption = getOptionBooleanFromMap(upperOptions, CREATE, null);
             if (createOption != null) {
                 config.create = createOption;
             }
             // TRUNCATE - used for truncating target table
-            Boolean truncateOption = getOptionBooleanFromMap(options, TRUNCATE, null);
+            Boolean truncateOption = getOptionBooleanFromMap(upperOptions, TRUNCATE, null);
             if (truncateOption != null) {
                 config.truncate = truncateOption;
             }
+            // STRICT_MODE - used for strict number conversion to avoid overflow,such as number with decimal digits cannot cast to integer
+            Boolean strictModeOption = getOptionBooleanFromMap(upperOptions, STRICT_MODE, null);
+            if (strictModeOption != null) {
+                config.strictMode = strictModeOption;
+            }
             // ERRORS - used for maximum number of errors allowed
-            Integer errorsOption = getOptionIntFromMap(options, ERRORS, null);
+            Integer errorsOption = getOptionIntFromMap(upperOptions, ERRORS, null);
             if (errorsOption != null) {
                 config.errors = errorsOption;
             }
-            String badFileOption = getOptionStringFromMap(options, BAD_FILE, null);
+            String badFileOption = getOptionStringFromMap(upperOptions, BAD_FILE, null);
             if (badFileOption != null && !badFileOption.isEmpty() && !badFileOption.equalsIgnoreCase("auto")) {
                 config.badFile = badFileOption;
             }
             // PLATFORM - used for database platform (oracle, mysql, db2, mssql, pgsql)
-            String platformOption = getOptionStringFromMap(options, PLATFORM, null);
+            String platformOption = getOptionStringFromMap(upperOptions, PLATFORM, null);
             if (platformOption != null && !platformOption.isEmpty() && !platformOption.equalsIgnoreCase("auto")) {
                 config.platform = platformOption;
             }
             // VARIABLE_FORMAT - used for variable placeholder format ("?" or ":")
-            String variableFormatOption = getOptionStringFromMap(options, VARIABLE_FORMAT, null);
+            String variableFormatOption = getOptionStringFromMap(upperOptions, VARIABLE_FORMAT, null);
             if (variableFormatOption != null) {
                 config.variableFormat = variableFormatOption.charAt(0);
             }
-            config.columnInfoSQL = getOptionStringFromMap(options, "COLUMN_INFO_SQL", null);
+            config.columnInfoSQL = getOptionStringFromMap(upperOptions, "COLUMN_INFO_SQL", null);
 
-            Object loggerOption = getOptionValueFromMap(options, LOGGER);
+            Object loggerOption = getOptionValueFromMap(upperOptions, LOGGER);
             if (loggerOption != null && loggerOption instanceof OutputStream) {
                 config.logger = (OutputStream) loggerOption;
             }
 
             // Parse skip columns option - columns to skip (auto, off, or list of column names)
-            String skipColumnsOption = getOptionStringFromMap(options, SKIP_COLUMNS, null);
+            String skipColumnsOption = getOptionStringFromMap(upperOptions, SKIP_COLUMNS, null);
             if (skipColumnsOption != null) {
                 skipColumnsOption = skipColumnsOption.trim();
                 if (skipColumnsOption.equalsIgnoreCase("off")) {
@@ -673,21 +692,16 @@ public class DBLoaderConfig {
     /**
      * Gets an option value from the options map, ignoring case.
      *
-     * @param options the options map
-     * @param key     the option key
+     * @param upperOptions the options map
+     * @param key          the option key
      * @return the option value, or null if not found
      */
-    private static Object getOptionValueFromMap(Map<String, Object> options, String key) {
-        if (options == null) {
+    private static Object getOptionValueFromMap(Map<String, Object> upperOptions, String key) {
+        if (upperOptions == null) {
             return null;
         }
 
-        for (Map.Entry<String, Object> entry : options.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
-                return entry.getValue();
-            }
-        }
-        return null;
+        return upperOptions.get(key.toUpperCase());
     }
 
     public void log(String message) {

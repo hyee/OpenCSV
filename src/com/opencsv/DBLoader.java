@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  * - Error handling with .bad file output for failed rows
  * - Transaction management with commit/rollback
  * - Database-specific column quoting (MySQL, PostgreSQL, SQL Server, Oracle)
- * - Comprehensive configuration via {@link DBLoaderConfig} class
+ * - Comprehensive configuration via {@link UserConfig} class
  * <p>
  * Example usage with DBLoaderConfig:
  * <pre>
@@ -240,7 +240,7 @@ public class DBLoader {
     private Connection connection;
     private String tableName;
     private String csvFilePath;
-    private DBLoaderConfig config;
+    private UserConfig config;
     private long totalRowsProcessed;
     private long totalErrors;
     private long totalBytesProcessed;
@@ -264,7 +264,7 @@ public class DBLoader {
      * @param csvFilePath the path to the CSV file
      * @param config      the configuration object containing all settings except csvFilePath
      */
-    public DBLoader(Connection connection, String tableName, String csvFilePath, DBLoaderConfig config) {
+    public DBLoader(Connection connection, String tableName, String csvFilePath, UserConfig config) {
         this.connection = connection;
         this.tableName = tableName;
         this.csvFilePath = csvFilePath;
@@ -281,7 +281,7 @@ public class DBLoader {
      * @param options     a map of configuration options
      */
     public DBLoader(Connection connection, String tableName, String csvFilePath, Map<String, Object> options) {
-        this(connection, tableName, csvFilePath, DBLoaderConfig.parseOptions(options));
+        this(connection, tableName, csvFilePath, UserConfig.parseOptions(options));
     }
 
     /**
@@ -323,11 +323,11 @@ public class DBLoader {
      */
     private static final BigInteger MAX_EXACT_DOUBLE_INTEGER = BigInteger.valueOf(1L << 53); // 2^53
 
-    private static Number parseNumeric(String str) {
-        return parseNumeric(str, Number.class);
+    private static Number parseNumeric(String str, boolean restrictMode) {
+        return parseNumeric(str, Number.class, restrictMode);
     }
 
-    private static Number parseNumeric(String str, Class<?> clz) {
+    private static Number parseNumeric(String str, Class<?> clz, boolean restrictMode) {
         if (str == null || str.isEmpty()) {
             return null;
         }
@@ -335,7 +335,34 @@ public class DBLoader {
         if (str.isEmpty()) {
             return null;
         }
+
         final boolean numberClass = clz.equals(Number.class);
+        if (!numberClass && !restrictMode) {
+            try {
+                if (clz.equals(BigDecimal.class)) {
+                    return new BigDecimal(str);
+                } else if (clz.equals(BigInteger.class)) {
+                    return new BigInteger(str);
+                }
+                final double value = Double.parseDouble(str);
+                if (clz.equals(Float.class)) {
+                    return (float) value;
+                } else if (clz.equals(Double.class)) {
+                    return value;
+                } else if (clz.equals(Long.class)) {
+                    return (long) value;
+                } else if (clz.equals(Integer.class)) {
+                    return (int) value;
+                } else if (clz.equals(Short.class)) {
+                    return (short) value;
+                } else if (clz.equals(Byte.class)) {
+                    return (byte) value;
+                }
+            } catch (Throwable e) {
+                return null;
+            }
+        }
+
         final boolean doubleClass = clz.equals(Float.class) || clz.equals(Double.class) || clz.equals(BigDecimal.class);
         if (!doubleClass && !str.contains(".") && !str.contains("e") && !str.contains("E")) {
             try {
@@ -394,14 +421,8 @@ public class DBLoader {
                     return value; // Long
                 }
             } catch (Throwable e) {
-
             }
-            if (!numberClass) {
-                return null;
-            }
-        }
-
-        if (numberClass || clz.equals(Double.class) || clz.equals(Float.class)) {
+        } else if (numberClass || clz.equals(Double.class) || clz.equals(Float.class)) {
             final double d = bd.doubleValue();
             if (bd.scale() <= 0 && bd.unscaledValue().abs().compareTo(MAX_EXACT_DOUBLE_INTEGER) <= 0) {
                 return clz.equals(Float.class) ? (float) d : d;
@@ -410,10 +431,10 @@ public class DBLoader {
             if (!Double.isFinite(d) && bd.compareTo(new BigDecimal(Double.toString(d))) == 0) {
                 return clz.equals(Float.class) ? (float) d : d;
             }
+        }
 
-            if (clz.equals(Double.class) || clz.equals(Float.class)) {
-                return null;
-            }
+        if (!numberClass) {
+            return null;
         }
         return bd;
     }
@@ -473,7 +494,7 @@ public class DBLoader {
      * Imports CSV data into database with various control options.
      * <p>
      * This method provides a comprehensive interface for CSV data import with options configured via
-     * {@link DBLoaderConfig} constants. All option names and string values are case-insensitive.
+     * {@link UserConfig} constants. All option names and string values are case-insensitive.
      * <p>
      * Options:
      * - DBLoaderConfig.SHOW: Controls what SQL statements to display and whether to execute them.
@@ -593,7 +614,7 @@ public class DBLoader {
         }
 
         // Parse options using DBLoaderConfig.parseOptions method
-        DBLoaderConfig config = DBLoaderConfig.parseOptions(options);
+        UserConfig config = UserConfig.parseOptions(options);
         config.hasHeader = true;
 
         String databaseProductName = getDatabaseProductName(connection, config);
@@ -717,10 +738,10 @@ public class DBLoader {
      */
 
     public static String generateInsertStatement(Connection connection, String tableName, String csvFilePath, Map<String, Object> options) throws Exception {
-        return generateInsertStatementWithConfig(connection, tableName, csvFilePath, DBLoaderConfig.parseOptions(options));
+        return generateInsertStatement(connection, tableName, csvFilePath, UserConfig.parseOptions(options));
     }
 
-    public static String generateInsertStatementWithConfig(Connection connection, String tableName, String csvFilePath, DBLoaderConfig config) throws Exception {
+    public static String generateInsertStatement(Connection connection, String tableName, String csvFilePath, UserConfig config) throws Exception {
         HashMap<String, Object[]> tableColumns = new HashMap<>();
         HashMap<String, String> columnMaps = new HashMap<>();
         if (connection != null && !connection.isClosed()) {
@@ -760,6 +781,10 @@ public class DBLoader {
             String[] headers = csvReader.readNext();
             if (headers == null || headers.length == 0) {
                 throw new Exception("CSV file has no header row");
+            }
+
+            if (csvReader.getEncoding() != null) {
+                config.log("CSV file encoding: " + csvReader.getEncoding());
             }
 
             int validColumnCount = headers.length;
@@ -813,7 +838,7 @@ public class DBLoader {
                         columnTypeNames.add(dataType);
                         columnTypes.add((int) columnInfo[2]);
                         columnSizes.add((int) columnInfo[3]);
-                    } else if (!tableColumns.isEmpty() && !config.skipColumns.containsKey(DBLoaderConfig.SKIP_COLUMNS_AUTO)) {
+                    } else if (!tableColumns.isEmpty() && !config.skipColumns.containsKey(UserConfig.SKIP_COLUMNS_AUTO)) {
                         throw new Exception("Target column `" + dbColumnName + "` does not match any table column");
                     }
                     String column = quoteColumnName(dbColumnName, databaseProductName);
@@ -857,7 +882,7 @@ public class DBLoader {
      *
      * @param config the DBLoaderConfig containing date, timestamp, and timestamptz formats
      */
-    public static void buildCustomDateTimeFormatterCache(DBLoaderConfig config) {
+    public static void buildCustomDateTimeFormatterCache(UserConfig config) {
         String dateFormat = config.dateFormat;
         String timestampFormat = config.timestampFormat;
         String timestamptzFormat = config.timestamptzFormat;
@@ -932,7 +957,7 @@ public class DBLoader {
         }
 
         // Parse options using DBLoaderConfig.parseOptions method
-        DBLoaderConfig config = DBLoaderConfig.parseOptions(options);
+        UserConfig config = UserConfig.parseOptions(options);
 
         if (!config.hasHeader) {
             throw new Exception("CSV file has no header row and no csvHeaders is provided");
@@ -1027,7 +1052,7 @@ public class DBLoader {
      * @param config     DBLoaderConfig object containing platform information
      * @return database product name
      */
-    private static String getDatabaseProductName(Connection connection, DBLoaderConfig config) {
+    private static String getDatabaseProductName(Connection connection, UserConfig config) {
         String platform = config.platform;
 
         if (platform != null && !platform.isEmpty()) {
@@ -1078,7 +1103,7 @@ public class DBLoader {
      * @param values list of sample values for the column
      * @return the SQL type constant from java.sql.Types
      */
-    private static int detectColumnType(List<String> values, boolean unescape, DBLoaderConfig config) {
+    private static int detectColumnType(List<String> values, boolean unescape, UserConfig config) {
         if (values == null || values.isEmpty()) {
             return Types.VARCHAR;
         }
@@ -1093,6 +1118,7 @@ public class DBLoader {
         int timeCount = 0;
         int binaryCount = 0;
         int totalCount = 0;
+        int varcharCount = 0;
 
         for (String value : values) {
             if (value == null || value.isEmpty()) {
@@ -1116,7 +1142,7 @@ public class DBLoader {
                 booleanCount++;
             } else if (isTimeValue(value)) {
                 timeCount++;
-            } else if ((num = parseNumeric(value)) != null) {
+            } else if ((num = parseNumeric(value, config.strictMode)) != null) {
                 if (num instanceof Long || num instanceof BigInteger) {
                     bigIntCount++;
                 } else if (num instanceof BigDecimal || num instanceof Float || num instanceof Double) {
@@ -1126,6 +1152,8 @@ public class DBLoader {
                 }
             } else if (isBinaryValue(unescapeNewline(value, unescape))) {
                 binaryCount++;
+            } else {
+                varcharCount++;
             }
         }
 
@@ -1134,6 +1162,10 @@ public class DBLoader {
         }
 
         double threshold = totalCount * 0.8;
+
+        if (varcharCount >= threshold) {
+            return Types.VARCHAR;
+        }
 
         if (binaryCount >= threshold) {
             return Types.VARBINARY;
@@ -1206,7 +1238,7 @@ public class DBLoader {
                 return "BIGINT";
 
             case Types.DECIMAL:
-                if (DBLoaderConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode)) {
+                if (UserConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode)) {
                     int[] decimalParams = calculateDecimalParams(values);
                     if (upperProductName.contains("POSTGRESQL")) {
                         return "NUMERIC(" + decimalParams[0] + "," + decimalParams[1] + ")";
@@ -1242,7 +1274,7 @@ public class DBLoader {
                 return "TIMESTAMPTZ";
 
             case Types.VARBINARY:
-                int binarySize = DBLoaderConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode) ? calculateMaxLength(values, 4000, 32767) : 4000;
+                int binarySize = UserConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode) ? calculateMaxLength(values, 4000, 32767) : 4000;
                 if (upperProductName.contains("ORACLE")) {
                     return "RAW(" + binarySize + ")";
                 }
@@ -1250,7 +1282,7 @@ public class DBLoader {
 
             case Types.VARCHAR:
             default:
-                int varcharSize = DBLoaderConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode) ? calculateMaxLength(values, 255, 4000) : 255;
+                int varcharSize = UserConfig.COLUMN_SIZE_ACTUAL.equals(columnSizeMode) ? calculateMaxLength(values, 255, 4000) : 255;
                 if (upperProductName.contains("ORACLE")) {
                     return "VARCHAR2(" + varcharSize + ")";
                 } else if (upperProductName.contains("SQL SERVER")) {
@@ -1270,7 +1302,7 @@ public class DBLoader {
         int precision = 38;
         int scale = 10;
         for (String value : values) {
-            if (value != null && !value.isEmpty() && parseNumeric(value) != null) {
+            if (value != null && !value.isEmpty() && parseNumeric(value, true) != null) {
                 String[] parts = value.split("\\.");
                 if (parts.length > 1) {
                     int currentScale = parts[1].length();
@@ -1343,7 +1375,7 @@ public class DBLoader {
      * @param value the string to check
      * @return true if the value is a date/timestamp representation
      */
-    private static Integer isDateTimeValue(String value, DBLoaderConfig config) {
+    private static Integer isDateTimeValue(String value, UserConfig config) {
         if (value == null || value.trim().isEmpty()) {
             return null;
         }
@@ -1420,7 +1452,7 @@ public class DBLoader {
         if (connection == null || connection.isClosed()) {
             throw new SQLException("Connection is null or closed");
         }
-        String insertSQL = generateInsertStatementWithConfig(connection, tableName, csvFilePath, config);
+        String insertSQL = generateInsertStatement(connection, tableName, csvFilePath, config);
         badFileWriter = null;
         badFilePath = null;
 
@@ -1463,19 +1495,16 @@ public class DBLoader {
                 if (config.rowLimit > 0 && rowIndex + 1 >= config.rowLimit) {
                     break;
                 }
-                totalBytesProcessed += calculateRowSize(row);
+                totalBytesProcessed += csvReader.getLineBytes();
                 totalRowsProcessed++;
                 try {
                     // Add row to batch
-                    int paramIndex = 1;
                     for (int i = 0; i < config.csvColumns.length; i++) {
                         String value = row.length > config.csvColumns[i] ? row[config.csvColumns[i]] : "";
-                        setPreparedStatementParameter(pstmt, paramIndex, config.columnTypes[i], value);
-                        paramIndex++;
+                        setPreparedStatementParameter(pstmt, i + 1, config.columnTypes[i], value);
                     }
                     pstmt.addBatch();
-                    batchRows[batchCount] = row;
-                    batchCount++;
+
                     // Rebuild time/timestamp formatters if needed
                     if (totalRowsProcessed >= 30) {
                         if (isNeedRebuildTimestampFormat && timestampFormatCount >= 100) {
@@ -1495,22 +1524,41 @@ public class DBLoader {
                         }
                     }
 
+                    batchRows[batchCount] = row;
+                    batchCount++;
+
                     if (batchCount >= config.batchSize) {
                         try {
                             pstmt.executeBatch();
+                            Arrays.fill(batchRows, null);
+                            batchCount *= 0;
+                            connection.commit();
+                            pstmt.clearBatch();
                         } catch (BatchUpdateException e) {
+                            connection.commit();
+                            pstmt.clearBatch();
                             handleBatchUpdateException(e, batchRows, batchCount);
+                            batchCount *= 0;
+                            // Add remaining rows to batch
+                            for (String[] cacheRow : batchRows) {
+                                if (cacheRow == null) {
+                                    break;
+                                }
+                                for (int i = 0; i < config.csvColumns.length; i++) {
+                                    String value = cacheRow.length > config.csvColumns[i] ? cacheRow[config.csvColumns[i]] : "";
+                                    setPreparedStatementParameter(pstmt, i + 1, config.columnTypes[i], value);
+                                }
+                                pstmt.addBatch();
+                                ++batchCount;
+                            }
+                            //Arrays.fill(batchRows, null);
                         }
-                        connection.commit();
-                        pstmt.clearBatch();
-                        batchCount = 0;
                         logProgress();
-                        Arrays.fill(batchRows, null);
                     }
                 } catch (Throwable e) {
                     final String err = "Error processing row #" + (rowIndex + 1 + config.skipLines) + ": " + e.getMessage();
-                    handleError(err);
                     writeBadRow(row, err);
+                    handleError(err);
                     config.log(err);
                 }
             }
@@ -1520,12 +1568,11 @@ public class DBLoader {
                 try {
                     pstmt.executeBatch();
                 } catch (BatchUpdateException e) {
-                    handleBatchUpdateException(e, batchRows, batchCount);
-                    pstmt.clearBatch();
+                    handleBatchUpdateException(e, batchRows, -1 * batchCount);
                 }
             }
             connection.commit();
-
+            pstmt.clearBatch();
             logProgress();
             String message = String.format("[%s] Load completed in %.2f seconds. Total rows processed: %d, Total successful: %d, Total errors: %d, MB processed: %.2f, successful/sec: %.2f",
                     java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
@@ -1568,25 +1615,53 @@ public class DBLoader {
      * Handles BatchUpdateException by identifying failed rows and writing them to .bad file.
      *
      * @param e         BatchUpdateException
-     * @param batchRows current rows being processed
+     * @param batchRows current rows being processedhandleError
      * @param batchSize batch size
      */
     private void handleBatchUpdateException(BatchUpdateException e, String[][] batchRows, int batchSize) throws IOException {
         final int[] updateCounts = e.getUpdateCounts();
-        String error = e.getMessage().trim();
+        String error = e.getMessage();
+        int pos = error.indexOf("\n");
+        if (pos > 0) {
+            error = error.substring(0, pos);
+        }
         writeBadRow(null, error);
-        int failedRows = 0;
         final int doneRows = updateCounts.length;
-        for (int i = 0; i < batchSize; i++) {
-            if (i >= doneRows || updateCounts[i] == Statement.EXECUTE_FAILED) {
+        final int totalRows = batchRows.length;
+        int failFlag = -1;
+        SQLException nextErr = e.getNextException();
+        for (int i = 0; i <= doneRows; i++) {
+            if ((i < doneRows && updateCounts[i] == Statement.EXECUTE_FAILED)
+                    || (i == doneRows && failFlag < 0 && totalRows > doneRows && batchRows[doneRows] != null)) {
+                String err = null;
+                if (nextErr != null) {
+                    err = nextErr.getMessage();
+                    pos = err.indexOf("\n");
+                    if (pos > 0) {
+                        err = err.substring(0, pos);
+                    }
+                    nextErr = nextErr.getNextException();
+                }
+                writeBadRow(batchRows[i], err);
                 handleError("Batch update failed at position " + (i + 1));
-                writeBadRow(batchRows[i], null);
-                failedRows++;
+                //if no error found in updateCounts, then the doneRows'th row in batchRows is the bad row
+                failFlag = i == doneRows ? 1 : 0;
             }
         }
-        final int pos = error.indexOf("\n");
-        error = error.substring(0, pos > 0 ? pos : error.length());
-        config.log("Total failed rows: " + failedRows + ", failed with " + (1 + updateCounts.length) + "th row: " + error);
+
+        final int size = batchSize < 0 ? -batchSize : batchSize;
+        for (int i = 0; i < size; i++) {
+            //now use failFlag as offset to get the correct row index
+            final int index = i + doneRows + failFlag;
+            final String[] row = index < totalRows ? batchRows[index] : null;
+            if (batchSize > 0) {
+                batchRows[i] = row;
+            } else if (row != null) {
+                //this is the last batch, directly write remaining rows into bad file
+                writeBadRow(row, null);
+            }
+        }
+        config.log("Total failed rows: " + totalErrors + ", failed with: " + error);
     }
 
     /**
@@ -1626,65 +1701,64 @@ public class DBLoader {
         Number num;
         switch (sqlType) {
             case Types.BIGINT:
-                num = parseNumeric(value, BigInteger.class);
+                num = parseNumeric(value, BigInteger.class, config.strictMode);
                 if (num != null) {
                     pstmt.setBigDecimal(paramIndex, new BigDecimal((BigInteger) num));
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid BIGINT value: " + value);
                 }
                 break;
-
             case Types.INTEGER:
-                num = parseNumeric(value, Integer.class);
+                num = parseNumeric(value, Integer.class, config.strictMode);
                 if (num != null) {
                     pstmt.setInt(paramIndex, (Integer) num);
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid INTEGER value: " + value);
                 }
                 break;
 
             case Types.SMALLINT:
-                num = parseNumeric(value, Short.class);
+                num = parseNumeric(value, Short.class, config.strictMode);
                 if (num != null) {
                     pstmt.setShort(paramIndex, (Short) num);
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid SMALLINT value: " + value);
                 }
                 break;
 
             case Types.TINYINT:
-                num = parseNumeric(value, Byte.class);
+                num = parseNumeric(value, Byte.class, config.strictMode);
                 if (num != null) {
                     pstmt.setByte(paramIndex, (Byte) num);
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid TINYINT value: " + value);
                 }
                 break;
             case Types.DECIMAL:
             case Types.NUMERIC:
             case 96: //BIGINT_UNSIGNED   
-                num = parseNumeric(value, BigDecimal.class);
+                num = parseNumeric(value, BigDecimal.class, config.strictMode);
                 if (num != null) {
                     pstmt.setBigDecimal(paramIndex, num instanceof BigDecimal ? (BigDecimal) num : new BigDecimal(value));
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid DECIMAL/NUMERIC value: " + value);
                 }
                 break;
             case Types.DOUBLE:
-                num = parseNumeric(value, Double.class);
+                num = parseNumeric(value, Double.class, config.strictMode);
                 if (num != null) {
                     pstmt.setDouble(paramIndex, (Double) num);
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid DOUBLE value: " + value);
                 }
                 break;
             case Types.FLOAT:
             case Types.REAL:
-                num = parseNumeric(value, Float.class);
+                num = parseNumeric(value, Float.class, config.strictMode);
                 if (num != null) {
                     pstmt.setFloat(paramIndex, (Float) num);
                 } else {
-                    throw new SQLException("Invalid numeric value: " + value);
+                    throw new SQLException("Invalid FLOAT/REAL value: " + value);
                 }
                 break;
             case Types.DATE:
@@ -1692,7 +1766,7 @@ public class DBLoader {
                 if (date != null) {
                     pstmt.setDate(paramIndex, new java.sql.Date(date.getTime()));
                 } else {
-                    throw new SQLException("Invalid date format: " + value);
+                    throw new SQLException("Invalid DATE value: " + value);
                 }
                 break;
             case Types.TIME:
@@ -1700,7 +1774,7 @@ public class DBLoader {
                 if (time != null) {
                     pstmt.setTime(paramIndex, time);
                 } else {
-                    throw new SQLException("Unable to parse time value: " + value);
+                    throw new SQLException("Invalid TIME value: " + value);
                 }
                 break;
             case Types.TIME_WITH_TIMEZONE:
@@ -1708,7 +1782,7 @@ public class DBLoader {
                 if (offsetTime != null) {
                     pstmt.setObject(paramIndex, offsetTime);
                 } else {
-                    throw new SQLException("Unable to parse time with timezone value: " + value);
+                    throw new SQLException("Invalid TIME_WITH_TIMEZONE value: " + value);
                 }
                 break;
 
@@ -1718,7 +1792,7 @@ public class DBLoader {
                 if (timestamp != null) {
                     pstmt.setTimestamp(paramIndex, timestamp);
                 } else {
-                    throw new SQLException("Unable to parse timestamp value: " + value);
+                    throw new SQLException("Invalid TIMESTAMP value: " + value);
                 }
                 break;
 
@@ -1729,7 +1803,7 @@ public class DBLoader {
                 if (offsetDateTime != null) {
                     pstmt.setObject(paramIndex, offsetDateTime);
                 } else {
-                    throw new SQLException("Unable to parse timestamp with timezone value: " + value);
+                    throw new SQLException("Invalid TIMESTAMP_WITH_TIMEZONE value: " + value);
                 }
                 break;
 
@@ -1749,7 +1823,7 @@ public class DBLoader {
                 if (bytes != null) {
                     pstmt.setBytes(paramIndex, bytes);
                 } else {
-                    throw new SQLException("Invalid binary data: " + value);
+                    throw new SQLException("Invalid BINARY/VARBINARY/LONGVARBINARY value: " + value);
                 }
                 break;
 
@@ -1870,19 +1944,28 @@ public class DBLoader {
                 appendTimestampFormatters(key, formatter);
 
                 if (temporal instanceof Instant) {
-                    Instant instant = (Instant) temporal;
-                    return OffsetDateTime.ofInstant(instant, java.time.ZoneId.systemDefault().getRules().getOffset(instant));
+                    if (!config.strictMode) {
+                        Instant instant = (Instant) temporal;
+                        return OffsetDateTime.ofInstant(instant, java.time.ZoneId.systemDefault().getRules().getOffset(instant));
+                    }
+                    return null;
                 } else if (temporal instanceof ZonedDateTime) {
                     ZonedDateTime zdt = (ZonedDateTime) temporal;
                     return zdt.toOffsetDateTime();
                 } else if (temporal instanceof OffsetDateTime) {
                     return (OffsetDateTime) temporal;
                 } else if (temporal instanceof LocalDateTime) {
-                    LocalDateTime ldt = (LocalDateTime) temporal;
-                    return ldt.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime();
+                    if (!config.strictMode) {
+                        LocalDateTime ldt = (LocalDateTime) temporal;
+                        return ldt.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime();
+                    }
+                    return null;
                 } else if (temporal instanceof LocalDate) {
-                    LocalDate ld = (LocalDate) temporal;
-                    return ld.atStartOfDay(java.time.ZoneId.systemDefault()).toOffsetDateTime();
+                    if (!config.strictMode) {
+                        LocalDate ld = (LocalDate) temporal;
+                        return ld.atStartOfDay(java.time.ZoneId.systemDefault()).toOffsetDateTime();
+                    }
+                    return null;
                 } else {
                     // Try to create LocalDateTime first
                     try {
@@ -2103,7 +2186,9 @@ public class DBLoader {
             if (errorMessage != null) {
                 String error = errorMessage.trim();
                 final int pos = error.indexOf("\n");
-                error = error.substring(0, pos > 0 ? pos : error.length());
+                if (pos > 0) {
+                    error = error.substring(0, pos);
+                }
                 badFileWriter.writeNext(new String[]{"[ERROR] " + error});
             }
             if (row != null) {
@@ -2116,56 +2201,6 @@ public class DBLoader {
                 badFileWriter = null;
             }
         }
-    }
-
-    /**
-     * Calculates the approximate byte size of a CSV row.
-     * Used for progress tracking.
-     *
-     * @param row the CSV row
-     * @return the approximate byte size
-     */
-    private long calculateRowSize(String[] row) {
-        if (row == null) {
-            return 0;
-        }
-
-        long size = 0;
-
-        // Approximate overhead for CSV row: separator characters and newline
-        // Each field is separated by a delimiter, plus a newline at the end
-        size += row.length - 1 + 2; // 1 byte per delimiter, 2 bytes for CRLF
-
-        // Calculate size for each field
-        for (String field : row) {
-            if (field != null) {
-                // For simplicity, assume UTF-8 encoding (1-4 bytes per character)
-                // Use 2 bytes as an average estimate
-                int fieldLength = field.length();
-                size += fieldLength * 2;
-
-                // Add overhead for quotes if field contains special characters
-                if (field.contains(String.valueOf(config.delimiter)) ||
-                        field.contains(String.valueOf(config.quotechar)) ||
-                        field.contains("\n") || field.contains("\r")) {
-                    size += 2; // 2 bytes for quotes
-
-                    // Add overhead for escaped characters
-                    int escapeCount = 0;
-                    for (char c : field.toCharArray()) {
-                        if (c == config.escape || c == config.quotechar) {
-                            escapeCount++;
-                        }
-                    }
-                    size += escapeCount; // 1 byte per escaped character
-                }
-            } else {
-                // For null values, assume minimal storage
-                size += 2; // Minimal overhead for null
-            }
-        }
-
-        return size;
     }
 
     /**
@@ -2233,7 +2268,7 @@ public class DBLoader {
      * @param message the error message
      */
     protected void handleError(String message) {
-        ++totalErrors;
+        totalErrors += 1;
         if (config.errors != -1 && totalErrors >= config.errors) {
             throw new RuntimeException("Error limit exceeded: " + totalErrors + " errors (max allowed: " + config.errors + ")");
         }
